@@ -20,6 +20,7 @@ export default function JobDetailPage() {
   const [showImages, setShowImages] = useState(false);
   const [showArticle, setShowArticle] = useState(false);
   const [downloadingZip, setDownloadingZip] = useState(false);
+  const [authChecked, setAuthChecked] = useState(false);
 
   const fetchJobDetail = useCallback(async (): Promise<boolean> => {
     try {
@@ -48,7 +49,7 @@ export default function JobDetailPage() {
         setArticle(data.article || null);
         setImages(data.images || []);
         setClient(data.client || null);
-        
+
         // 완료 또는 오류 상태면 폴링 중지
         if (data.job.status === 'done' || data.job.status === 'error') {
           setPolling(false);
@@ -64,28 +65,32 @@ export default function JobDetailPage() {
     return false;
   }, [jobId]);
 
-  // 현재 로그인된 사용자 정보 가져오기
   useEffect(() => {
-    const sessionStr = localStorage.getItem('admin_session');
-    if (sessionStr) {
-      try {
-        const session = JSON.parse(sessionStr);
-        setCurrentUser(session.username || null);
-      } catch (error) {
-        console.error('세션 파싱 오류:', error);
+    if (authChecked) {
+      const sessionStr = localStorage.getItem('admin_session');
+      if (sessionStr) {
+        try {
+          const session = JSON.parse(sessionStr);
+          setCurrentUser(session.username || null);
+        } catch (error) {
+          console.error('세션 파싱 오류:', error);
+        }
       }
     }
-  }, []);
+  }, [authChecked]);
+
 
   // 초기 로드 및 jobId 변경 시
   useEffect(() => {
-    setLoading(true);
-    fetchJobDetail();
-  }, [jobId]); // jobId만 의존성으로 사용하여 페이지 이동 시 새로 로드
+    if (authChecked) {
+      setLoading(true);
+      fetchJobDetail();
+    }
+  }, [jobId, authChecked]); // jobId와 authChecked를 의존성으로 사용
 
   // 폴링 로직 (별도 useEffect)
   useEffect(() => {
-    if (!job) return;
+    if (!job || !authChecked) return;
 
     // 처리 중이면 폴링 시작
     if (job.status === 'processing' || job.status === 'pending') {
@@ -106,7 +111,7 @@ export default function JobDetailPage() {
     } else {
       setPolling(false);
     }
-  }, [job?.status, fetchJobDetail]);
+  }, [job?.status, fetchJobDetail, authChecked]);
 
   const handleCopy = () => {
     if (article?.content) {

@@ -2,10 +2,12 @@
 
 import { useState, useEffect } from 'react';
 import React from 'react';
+import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Client } from '@/lib/types';
 
 export default function ClientsPage() {
+  const router = useRouter();
   const [clients, setClients] = useState<Client[]>([]);
   const [filteredClients, setFilteredClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(true);
@@ -14,6 +16,7 @@ export default function ClientsPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 20;
+  const [authChecked, setAuthChecked] = useState(false);
   const [formData, setFormData] = useState({
     name: '',
     place_url: '',
@@ -38,8 +41,34 @@ export default function ClientsPage() {
   ];
 
   useEffect(() => {
-    fetchClients();
+    checkAuth();
   }, []);
+
+  const checkAuth = () => {
+    try {
+      const sessionStr = localStorage.getItem('admin_session');
+      if (!sessionStr) {
+        router.push('/login');
+        return;
+      }
+      const session = JSON.parse(sessionStr);
+      if (!session || !session.username) {
+        router.push('/login');
+        return;
+      }
+      setAuthChecked(true);
+      fetchClients();
+    } catch (error) {
+      console.error('인증 확인 오류:', error);
+      router.push('/login');
+    }
+  };
+
+  useEffect(() => {
+    if (authChecked) {
+      fetchClients();
+    }
+  }, [authChecked]);
 
   // 검색 필터링
   useEffect(() => {
@@ -91,6 +120,29 @@ export default function ClientsPage() {
       keywords: '',
       memo: '',
     });
+  };
+
+  const handleDelete = async (clientId: string, clientName: string) => {
+    if (!confirm(`"${clientName}" 업체를 정말 삭제하시겠습니까? 관련된 모든 작업과 원고도 함께 삭제되며 복구할 수 없습니다.`)) {
+      return;
+    }
+
+    try {
+      const res = await fetch(`/api/clients/${clientId}`, {
+        method: 'DELETE',
+      });
+
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.error || '업체 삭제 실패');
+      }
+
+      alert('업체가 삭제되었습니다.');
+      fetchClients();
+    } catch (error) {
+      console.error('업체 삭제 오류:', error);
+      alert(`업체 삭제 중 오류가 발생했습니다: ${error instanceof Error ? error.message : String(error)}`);
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -336,6 +388,13 @@ export default function ClientsPage() {
                         >
                           작업 생성
                         </Link>
+                        <span className="text-gray-300">|</span>
+                        <button
+                          onClick={() => handleDelete(client.id, client.name)}
+                          className="text-red-600 hover:underline"
+                        >
+                          삭제
+                        </button>
                       </div>
                     </td>
                   </tr>

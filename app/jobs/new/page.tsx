@@ -124,6 +124,7 @@ function NewJobPageContent() {
   const [images, setImages] = useState<File[]>([]);
   const [loading, setLoading] = useState(false);
   const [currentUser, setCurrentUser] = useState<string | null>(null);
+  const [authChecked, setAuthChecked] = useState(false);
   
   // 여러 건 생성용 상태
   const [multipleJobs, setMultipleJobs] = useState<Array<{
@@ -134,18 +135,35 @@ function NewJobPageContent() {
   }>>([{ id: '1', images: [], guide: '', useBaseGuide: true }]);
 
   useEffect(() => {
-    fetchClients();
-    // 현재 로그인된 사용자 정보 가져오기
-    const sessionStr = localStorage.getItem('admin_session');
-    if (sessionStr) {
-      try {
-        const session = JSON.parse(sessionStr);
-        setCurrentUser(session.username || null);
-      } catch (error) {
-        console.error('세션 파싱 오류:', error);
-      }
-    }
+    checkAuth();
   }, []);
+
+  const checkAuth = () => {
+    try {
+      const sessionStr = localStorage.getItem('admin_session');
+      if (!sessionStr) {
+        router.push('/login');
+        return;
+      }
+      const session = JSON.parse(sessionStr);
+      if (!session || !session.username) {
+        router.push('/login');
+        return;
+      }
+      setCurrentUser(session.username || null);
+      setAuthChecked(true);
+      fetchClients();
+    } catch (error) {
+      console.error('인증 확인 오류:', error);
+      router.push('/login');
+    }
+  };
+
+  useEffect(() => {
+    if (authChecked) {
+      fetchClients();
+    }
+  }, [authChecked]);
 
   // 검색 필터링
   useEffect(() => {

@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import React from 'react';
+import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import JSZip from 'jszip';
 import { Job } from '@/lib/types';
@@ -22,6 +23,7 @@ interface JobGroup {
 }
 
 export default function JobsPage() {
+  const router = useRouter();
   const [jobs, setJobs] = useState<JobWithClient[]>([]);
   const [filteredJobs, setFilteredJobs] = useState<JobWithClient[]>([]);
   const [jobGroups, setJobGroups] = useState<JobGroup[]>([]);
@@ -32,21 +34,39 @@ export default function JobsPage() {
   const [downloadFilter, setDownloadFilter] = useState<'all' | 'downloaded' | 'not_downloaded'>('all');
   const [currentUser, setCurrentUser] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
+  const [authChecked, setAuthChecked] = useState(false);
   const itemsPerPage = 20;
 
   useEffect(() => {
-    // 초기 로드 및 사용자 정보 가져오기
-    fetchJobs(false);
-    const sessionStr = localStorage.getItem('admin_session');
-    if (sessionStr) {
-      try {
-        const session = JSON.parse(sessionStr);
-        setCurrentUser(session.username || null);
-      } catch (error) {
-        console.error('세션 파싱 오류:', error);
-      }
-    }
+    checkAuth();
   }, []);
+
+  const checkAuth = () => {
+    try {
+      const sessionStr = localStorage.getItem('admin_session');
+      if (!sessionStr) {
+        router.push('/login');
+        return;
+      }
+      const session = JSON.parse(sessionStr);
+      if (!session || !session.username) {
+        router.push('/login');
+        return;
+      }
+      setCurrentUser(session.username || null);
+      setAuthChecked(true);
+      fetchJobs(false);
+    } catch (error) {
+      console.error('인증 확인 오류:', error);
+      router.push('/login');
+    }
+  };
+
+  useEffect(() => {
+    if (authChecked) {
+      fetchJobs(false);
+    }
+  }, [authChecked]);
 
   // filterType이 변경될 때 원고 내용 포함 여부 결정
   useEffect(() => {

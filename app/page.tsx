@@ -1,9 +1,11 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 
 export default function Home() {
+  const router = useRouter();
   const [stats, setStats] = useState({
     totalJobs: 0,
     doneJobs: 0,
@@ -11,10 +13,37 @@ export default function Home() {
     totalClients: 0,
   });
   const [loading, setLoading] = useState(true);
+  const [authChecked, setAuthChecked] = useState(false);
 
   useEffect(() => {
-    fetchDashboardData();
+    checkAuth();
   }, []);
+
+  const checkAuth = () => {
+    try {
+      const sessionStr = localStorage.getItem('admin_session');
+      if (!sessionStr) {
+        router.push('/login');
+        return;
+      }
+      const session = JSON.parse(sessionStr);
+      if (!session || !session.username) {
+        router.push('/login');
+        return;
+      }
+      setAuthChecked(true);
+      fetchDashboardData();
+    } catch (error) {
+      console.error('인증 확인 오류:', error);
+      router.push('/login');
+    }
+  };
+
+  useEffect(() => {
+    if (authChecked) {
+      fetchDashboardData();
+    }
+  }, [authChecked]);
 
   const fetchDashboardData = async () => {
     try {

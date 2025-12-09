@@ -22,6 +22,30 @@ export async function GET(
   }
 }
 
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  try {
+    const clientId = params.id;
+
+    // 클라이언트 삭제 (CASCADE로 관련 jobs, articles도 자동 삭제됨)
+    const { error: deleteError } = await supabaseAdmin
+      .from('clients')
+      .delete()
+      .eq('id', clientId);
+
+    if (deleteError) {
+      return NextResponse.json({ error: '업체 삭제 실패', details: deleteError }, { status: 500 });
+    }
+
+    return NextResponse.json({ success: true, message: '업체가 삭제되었습니다.' });
+  } catch (error) {
+    console.error('업체 삭제 오류:', error);
+    return NextResponse.json({ error: '서버 오류', details: String(error) }, { status: 500 });
+  }
+}
+
 export async function PATCH(
   request: NextRequest,
   { params }: { params: { id: string } }
