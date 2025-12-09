@@ -183,46 +183,75 @@ async function processJobAsync(
     if (imagePaths.length > 0) {
       const client = getAnthropicClient();
       
-      // 이미지 URL 가져오기
-      const imageUrls = imagePaths.map((path) => {
-        const { data } = supabaseAdmin.storage.from('job-images').getPublicUrl(path);
-        return data.publicUrl;
-      });
+      // 이미지를 base64로 변환
+      const imageBase64Array: Array<{ type: 'image'; source: { type: 'base64'; media_type: 'image/jpeg' | 'image/png' | 'image/webp' | 'image/gif'; data: string } }> = [];
+      
+      for (const path of imagePaths) {
+        try {
+          // Supabase Storage에서 이미지 다운로드
+          const { data: imageData, error: downloadError } = await supabaseAdmin.storage
+            .from('job-images')
+            .download(path);
+          
+          if (downloadError || !imageData) {
+            console.error(`이미지 다운로드 실패 (${path}):`, downloadError);
+            continue;
+          }
+          
+          // ArrayBuffer를 base64로 변환
+          const arrayBuffer = await imageData.arrayBuffer();
+          const base64 = Buffer.from(arrayBuffer).toString('base64');
+          
+          // MIME 타입 결정 (기본값: image/jpeg)
+          const mediaType: 'image/jpeg' | 'image/png' | 'image/webp' | 'image/gif' = 
+            path.toLowerCase().endsWith('.png') ? 'image/png' : 
+            path.toLowerCase().endsWith('.webp') ? 'image/webp' : 
+            path.toLowerCase().endsWith('.gif') ? 'image/gif' :
+            'image/jpeg';
+          
+          imageBase64Array.push({
+            type: 'image',
+            source: {
+              type: 'base64',
+              media_type: mediaType,
+              data: base64,
+            },
+          });
+        } catch (error) {
+          console.error(`이미지 처리 오류 (${path}):`, error);
+        }
+      }
 
       // Vision 분석
-      try {
-        const visionResponse = await client.messages.create({
-          model: MODEL_SNAPSHOT,
-          max_tokens: 1000,
-          messages: [
-            {
-              role: 'user',
-              content: [
-                {
-                  type: 'text',
-                  text: '이 사진들을 분석하여 원고 작성에 활용할 수 있는 키워드와 인상, 분위기를 간단히 정리해주세요. 각 사진에 대해 1-2문장으로 요약해주세요.',
-                },
-                ...imageUrls.map((url) => ({
-                  type: 'image',
-                  source: {
-                    type: 'url',
-                    url,
+      if (imageBase64Array.length > 0) {
+        try {
+          const visionResponse = await client.messages.create({
+            model: MODEL_SNAPSHOT,
+            max_tokens: 1000,
+            messages: [
+              {
+                role: 'user',
+                content: [
+                  {
+                    type: 'text',
+                    text: '이 사진들을 분석하여 원고 작성에 활용할 수 있는 키워드와 인상, 분위기를 간단히 정리해주세요. 각 사진에 대해 1-2문장으로 요약해주세요.',
                   },
-                })),
-              ],
-            },
-          ],
-        });
+                  ...imageBase64Array,
+                ],
+              },
+            ],
+          });
 
-        const visionText = visionResponse.content[0].type === 'text' ? visionResponse.content[0].text : '';
-        imageDescriptions = visionText.split('\n').filter((line) => line.trim().length > 0);
-      } catch (visionError: any) {
-        console.error('Vision 처리 오류:', visionError);
-        // Vision 실패해도 계속 진행
-        if (visionError.status === 401 || visionError.status === 403) {
-          const key = getClientApiKey(client);
-          if (key) {
-            markKeyAsError(key);
+          const visionText = visionResponse.content[0].type === 'text' ? visionResponse.content[0].text : '';
+          imageDescriptions = visionText.split('\n').filter((line) => line.trim().length > 0);
+        } catch (visionError: any) {
+          console.error('Vision 처리 오류:', visionError);
+          // Vision 실패해도 계속 진행
+          if (visionError.status === 401 || visionError.status === 403) {
+            const key = getClientApiKey(client);
+            if (key) {
+              markKeyAsError(key);
+            }
           }
         }
       }

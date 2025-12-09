@@ -80,12 +80,13 @@ export default function JobsPage() {
       const batchIds = new Set(jobs.filter((j) => j.batch_id).map((j) => j.batch_id));
       const batchAllNotDownloaded = new Set<string>();
       
-      batchIds.forEach((batchId) => {
-        const batchJobs = jobs.filter((j) => j.batch_id === batchId);
-        if (batchJobs.every((j) => !j.downloaded_by)) {
-          batchAllNotDownloaded.add(batchId);
-        }
-      });
+            batchIds.forEach((batchId) => {
+              if (!batchId) return;
+              const batchJobs = jobs.filter((j) => j.batch_id === batchId);
+              if (batchJobs.every((j) => !j.downloaded_by)) {
+                batchAllNotDownloaded.add(batchId);
+              }
+            });
 
       filtered = filtered.filter((job) => {
         if (!job.downloaded_by && !job.batch_id) return true;

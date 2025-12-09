@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useDropzone } from 'react-dropzone';
 import { Client } from '@/lib/types';
@@ -105,7 +105,7 @@ function JobImageDropzone({
   );
 }
 
-export default function NewJobPage() {
+function NewJobPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const clientIdParam = searchParams.get('client_id');
@@ -673,6 +673,14 @@ export default function NewJobPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function NewJobPage() {
+  return (
+    <Suspense fallback={<div className="p-8 text-center">로딩 중...</div>}>
+      <NewJobPageContent />
+    </Suspense>
   );
 }
 
