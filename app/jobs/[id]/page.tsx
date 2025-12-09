@@ -22,6 +22,30 @@ export default function JobDetailPage() {
   const [downloadingZip, setDownloadingZip] = useState(false);
   const [authChecked, setAuthChecked] = useState(false);
 
+  useEffect(() => {
+    checkAuth();
+  }, []);
+
+  const checkAuth = () => {
+    try {
+      const sessionStr = localStorage.getItem('admin_session');
+      if (!sessionStr) {
+        router.push('/login');
+        return;
+      }
+      const session = JSON.parse(sessionStr);
+      if (!session || !session.username) {
+        router.push('/login');
+        return;
+      }
+      setCurrentUser(session.username || null);
+      setAuthChecked(true);
+    } catch (error) {
+      console.error('인증 확인 오류:', error);
+      router.push('/login');
+    }
+  };
+
   const fetchJobDetail = useCallback(async (): Promise<boolean> => {
     try {
       // 캐시 방지를 위해 timestamp 추가 및 headers 설정
@@ -65,20 +89,6 @@ export default function JobDetailPage() {
     return false;
   }, [jobId]);
 
-  useEffect(() => {
-    if (authChecked) {
-      const sessionStr = localStorage.getItem('admin_session');
-      if (sessionStr) {
-        try {
-          const session = JSON.parse(sessionStr);
-          setCurrentUser(session.username || null);
-        } catch (error) {
-          console.error('세션 파싱 오류:', error);
-        }
-      }
-    }
-  }, [authChecked]);
-
 
   // 초기 로드 및 jobId 변경 시
   useEffect(() => {
@@ -86,7 +96,7 @@ export default function JobDetailPage() {
       setLoading(true);
       fetchJobDetail();
     }
-  }, [jobId, authChecked]); // jobId와 authChecked를 의존성으로 사용
+  }, [jobId, authChecked, fetchJobDetail]); // jobId, authChecked, fetchJobDetail를 의존성으로 사용
 
   // 폴링 로직 (별도 useEffect)
   useEffect(() => {
