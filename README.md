@@ -60,6 +60,8 @@ npm run dev
 
 Railway로 배포하는 방법은 [RAILWAY_DEPLOY.md](./RAILWAY_DEPLOY.md) 파일을 참고하세요.
 
+**배포 주소:** https://influx-writer-production.up.railway.app
+
 ## 사용 방법
 
 ### 1. 업체 등록

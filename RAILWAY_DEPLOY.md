@@ -92,8 +92,10 @@ Railway는 Next.js를 자동으로 감지하지만, 다음을 확인하세요:
 배포 완료 후, 다음 URL로 접속하여 Super Admin 계정을 생성합니다:
 
 ```
-https://your-railway-domain.railway.app/api/init/super-admin?secret=your_random_secret_string_here
+https://influx-writer-production.up.railway.app/api/init/super-admin
 ```
+
+**실제 배포 주소:** https://influx-writer-production.up.railway.app
 
 **주의**: 
 - `SUPER_ADMIN_INIT_SECRET`을 환경 변수로 설정했다면 해당 값을 사용
