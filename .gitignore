@@ -31,6 +31,7 @@ yarn-error.log*
 # Railway environment variable files (contain API keys)
 RAILWAY_ENV_*.txt
 RAILWAY_ENV_*.md
+RAILWAY_API_KEYS_*.md
 
 # vercel
 .vercel
