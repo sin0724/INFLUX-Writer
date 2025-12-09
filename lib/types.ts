@@ -7,6 +7,7 @@ export interface Client {
   keywords: string | null;
   default_style_id: string | null;
   memo: string | null;
+  requires_confirmation: boolean;
   created_at: string;
 }
 

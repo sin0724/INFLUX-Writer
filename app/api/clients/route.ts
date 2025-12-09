@@ -4,7 +4,7 @@ import { supabaseAdmin } from '@/lib/supabase';
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { name, place_url, category, base_guide, keywords, default_style_id, memo } = body;
+    const { name, place_url, category, base_guide, keywords, default_style_id, memo, requires_confirmation } = body;
 
     const { data, error } = await supabaseAdmin
       .from('clients')
@@ -16,6 +16,7 @@ export async function POST(request: NextRequest) {
         keywords: keywords || null,
         default_style_id: default_style_id || null,
         memo: memo || null,
+        requires_confirmation: requires_confirmation || false,
       })
       .select()
       .single();

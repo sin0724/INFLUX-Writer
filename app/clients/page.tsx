@@ -24,6 +24,7 @@ export default function ClientsPage() {
     base_guide: '',
     keywords: '',
     memo: '',
+    requires_confirmation: false,
   });
 
   const categories = [
@@ -111,6 +112,7 @@ export default function ClientsPage() {
       base_guide: client.base_guide || '',
       keywords: client.keywords || '',
       memo: client.memo || '',
+      requires_confirmation: client.requires_confirmation || false,
     });
     setShowForm(true);
   };
@@ -125,6 +127,7 @@ export default function ClientsPage() {
       base_guide: '',
       keywords: '',
       memo: '',
+      requires_confirmation: false,
     });
   };
 
@@ -181,6 +184,7 @@ export default function ClientsPage() {
           base_guide: '',
           keywords: '',
           memo: '',
+          requires_confirmation: false,
         });
         fetchClients();
         alert(editingClient ? '업체 정보가 수정되었습니다.' : '업체가 등록되었습니다.');
@@ -271,6 +275,18 @@ export default function ClientsPage() {
                   className="w-full px-3 py-2 border rounded"
                   placeholder="https://place.map.kakao.com/..."
                 />
+              </div>
+              <div>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={formData.requires_confirmation}
+                    onChange={(e) => setFormData({ ...formData, requires_confirmation: e.target.checked })}
+                    className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                  />
+                  <span className="text-sm font-medium">컨펌을 받아야 하는 업체</span>
+                </label>
+                <p className="text-xs text-gray-500 mt-1 ml-6">체크 시 광고주 컨펌이 필요한 업체로 표시됩니다</p>
               </div>
               <div>
                 <label className="block text-sm font-medium mb-1">업종</label>

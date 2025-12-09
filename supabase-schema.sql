@@ -8,6 +8,7 @@ CREATE TABLE IF NOT EXISTS clients (
   keywords TEXT,
   default_style_id UUID,
   memo TEXT,
+  requires_confirmation BOOLEAN DEFAULT false,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 

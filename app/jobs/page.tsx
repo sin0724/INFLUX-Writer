@@ -10,6 +10,7 @@ import { Job } from '@/lib/types';
 interface JobWithClient extends Job {
   client_name?: string | null;
   article_content?: string | null;
+  client_requires_confirmation?: boolean;
 }
 
 interface JobGroup {
@@ -32,6 +33,7 @@ export default function JobsPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [filterType, setFilterType] = useState<'all' | 'client' | 'creator' | 'downloader' | 'content'>('all');
   const [downloadFilter, setDownloadFilter] = useState<'all' | 'downloaded' | 'not_downloaded'>('all');
+  const [confirmationFilter, setConfirmationFilter] = useState<'all' | 'requires_confirmation' | 'no_confirmation'>('all');
   const [currentUser, setCurrentUser] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [authChecked, setAuthChecked] = useState(false);
@@ -77,6 +79,13 @@ export default function JobsPage() {
   // 검색 필터링 및 그룹화
   useEffect(() => {
     let filtered = jobs;
+
+    // 컨펌 필요 여부 필터
+    if (confirmationFilter === 'requires_confirmation') {
+      filtered = filtered.filter((job) => job.client_requires_confirmation === true);
+    } else if (confirmationFilter === 'no_confirmation') {
+      filtered = filtered.filter((job) => job.client_requires_confirmation === false);
+    }
 
     // 다운로드 여부 필터 (배치 작업도 포함)
     if (downloadFilter === 'downloaded') {
@@ -222,7 +231,7 @@ export default function JobsPage() {
         매칭된_작업: matchedJobs.length,
       });
     }
-  }, [searchQuery, filterType, downloadFilter, jobs]);
+  }, [searchQuery, filterType, downloadFilter, confirmationFilter, jobs]);
 
   const fetchJobs = async (includeContent: boolean = false) => {
     try {
@@ -469,9 +478,45 @@ export default function JobsPage() {
         {/* 검색 필터 */}
         <div className="bg-white p-6 rounded-lg shadow-lg border border-gray-200 mb-6">
           <div className="flex flex-col gap-5">
+            {/* 업체 유형 필터 */}
+            <div className="flex items-center gap-3">
+              <label className="text-sm font-semibold text-gray-700">업체 유형</label>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setConfirmationFilter('all')}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                    confirmationFilter === 'all'
+                      ? 'bg-blue-600 text-white shadow-md'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  }`}
+                >
+                  전체
+                </button>
+                <button
+                  onClick={() => setConfirmationFilter('requires_confirmation')}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                    confirmationFilter === 'requires_confirmation'
+                      ? 'bg-purple-600 text-white shadow-md'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  }`}
+                >
+                  컨펌 필요 업체
+                </button>
+                <button
+                  onClick={() => setConfirmationFilter('no_confirmation')}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                    confirmationFilter === 'no_confirmation'
+                      ? 'bg-green-600 text-white shadow-md'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  }`}
+                >
+                  임의 작업 업체
+                </button>
+              </div>
+            </div>
             {/* 다운로드 상태 필터 */}
             <div className="flex items-center gap-3">
-              <label className="text-sm font-semibold text-gray-700">컨펌 상태</label>
+              <label className="text-sm font-semibold text-gray-700">다운로드 상태</label>
               <div className="flex gap-2">
                 <button
                   onClick={() => setDownloadFilter('all')}

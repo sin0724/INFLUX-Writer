@@ -353,7 +353,7 @@ export async function GET(request: NextRequest) {
     const clientId = searchParams.get('client_id');
     const includeContent = searchParams.get('include_content') === 'true';
 
-    let query = supabaseAdmin.from('jobs').select('*, clients(name)').order('created_at', { ascending: false });
+    let query = supabaseAdmin.from('jobs').select('*, clients(name, requires_confirmation)').order('created_at', { ascending: false });
 
     if (clientId) {
       query = query.eq('client_id', clientId);
@@ -369,6 +369,7 @@ export async function GET(request: NextRequest) {
     let jobsWithClient = (data || []).map((job: any) => ({
       ...job,
       client_name: job.clients?.name || null,
+      client_requires_confirmation: job.clients?.requires_confirmation || false,
     }));
 
     // 원고 내용이 필요한 경우 조회
