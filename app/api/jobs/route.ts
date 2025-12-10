@@ -3,6 +3,7 @@ import { supabaseAdmin } from '@/lib/supabase';
 import { getAnthropicClient, MODEL_SNAPSHOT, markKeyAsError, getClientApiKey } from '@/lib/anthropicClient';
 import { buildPrompt } from '@/lib/promptEngine';
 import { Category } from '@/lib/types';
+import sharp from 'sharp';
 
 // 이미지 자동 정리 함수
 async function cleanupOldImages() {
@@ -183,7 +184,7 @@ async function processJobAsync(
     if (imagePaths.length > 0) {
       const client = getAnthropicClient();
       
-      // 이미지를 base64로 변환
+      // 이미지를 base64로 변환 (리사이즈 및 압축 포함)
       const imageBase64Array: Array<{ type: 'image'; source: { type: 'base64'; media_type: 'image/jpeg' | 'image/png' | 'image/webp' | 'image/gif'; data: string } }> = [];
       
       for (const path of imagePaths) {
@@ -198,60 +199,169 @@ async function processJobAsync(
             continue;
           }
           
-          // ArrayBuffer를 base64로 변환
+          // ArrayBuffer 가져오기
           const arrayBuffer = await imageData.arrayBuffer();
-          const base64 = Buffer.from(arrayBuffer).toString('base64');
+          const buffer = Buffer.from(arrayBuffer);
           
-          // MIME 타입 결정 (기본값: image/jpeg)
-          const mediaType: 'image/jpeg' | 'image/png' | 'image/webp' | 'image/gif' = 
-            path.toLowerCase().endsWith('.png') ? 'image/png' : 
-            path.toLowerCase().endsWith('.webp') ? 'image/webp' : 
-            path.toLowerCase().endsWith('.gif') ? 'image/gif' :
-            'image/jpeg';
+          // 이미지 리사이즈 및 압축 (최대 너비 1920px, JPEG 품질 85%)
+          let processedBuffer: Buffer;
+          try {
+            const image = sharp(buffer);
+            const metadata = await image.metadata();
+            
+            // 이미지가 너무 크면 리사이즈 (최대 너비 1920px)
+            if (metadata.width && metadata.width > 1920) {
+              processedBuffer = await image
+                .resize(1920, null, { 
+                  withoutEnlargement: true,
+                  fit: 'inside'
+                })
+                .jpeg({ quality: 85, mozjpeg: true })
+                .toBuffer();
+            } else {
+              // 크기가 적절하면 JPEG로 변환만 (품질 85%)
+              processedBuffer = await image
+                .jpeg({ quality: 85, mozjpeg: true })
+                .toBuffer();
+            }
+          } catch (sharpError) {
+            console.error(`이미지 리사이즈 오류 (${path}):`, sharpError);
+            // 리사이즈 실패 시 원본 사용
+            processedBuffer = buffer;
+          }
           
-          imageBase64Array.push({
-            type: 'image',
-            source: {
-              type: 'base64',
-              media_type: mediaType,
-              data: base64,
-            },
-          });
+          // base64로 변환
+          const base64 = processedBuffer.toString('base64');
+          
+          // MIME 타입은 항상 image/jpeg로 통일 (압축 후)
+          const mediaType: 'image/jpeg' = 'image/jpeg';
+          
+          // 이미지 크기 체크 (5MB 제한 - base64는 약 33% 더 크므로 3.7MB로 제한)
+          const base64SizeMB = (base64.length * 3) / 4 / 1024 / 1024;
+          if (base64SizeMB > 3.7) {
+            console.warn(`이미지가 너무 큽니다 (${base64SizeMB.toFixed(2)}MB): ${path}, 더 작게 리사이즈 시도`);
+            // 더 작게 리사이즈 (최대 너비 1280px)
+            try {
+              const resizedBuffer = await sharp(buffer)
+                .resize(1280, null, { 
+                  withoutEnlargement: true,
+                  fit: 'inside'
+                })
+                .jpeg({ quality: 75, mozjpeg: true })
+                .toBuffer();
+              const resizedBase64 = resizedBuffer.toString('base64');
+              const resizedSizeMB = (resizedBase64.length * 3) / 4 / 1024 / 1024;
+              
+              if (resizedSizeMB > 3.7) {
+                console.warn(`리사이즈 후에도 너무 큽니다 (${resizedSizeMB.toFixed(2)}MB): ${path}, 스킵`);
+                continue;
+              }
+              
+              imageBase64Array.push({
+                type: 'image',
+                source: {
+                  type: 'base64',
+                  media_type: mediaType,
+                  data: resizedBase64,
+                },
+              });
+            } catch (resizeError) {
+              console.error(`이미지 재리사이즈 오류 (${path}):`, resizeError);
+              continue;
+            }
+          } else {
+            imageBase64Array.push({
+              type: 'image',
+              source: {
+                type: 'base64',
+                media_type: mediaType,
+                data: base64,
+              },
+            });
+          }
         } catch (error) {
           console.error(`이미지 처리 오류 (${path}):`, error);
         }
       }
 
-      // Vision 분석
+      // Vision 분석 (이미지를 여러 번에 나눠서 보내기 - 한 번에 최대 3개)
       if (imageBase64Array.length > 0) {
-        try {
-          const visionResponse = await client.messages.create({
-            model: MODEL_SNAPSHOT,
-            max_tokens: 1000,
-            messages: [
-              {
-                role: 'user',
-                content: [
-                  {
-                    type: 'text',
-                    text: '이 사진들을 분석하여 원고 작성에 활용할 수 있는 키워드와 인상, 분위기를 간단히 정리해주세요. 각 사진에 대해 1-2문장으로 요약해주세요.',
-                  },
-                  ...imageBase64Array,
-                ],
-              },
-            ],
-          });
+        const maxImagesPerRequest = 3;
+        const imageBatches: Array<typeof imageBase64Array> = [];
+        
+        // 이미지를 배치로 나누기
+        for (let i = 0; i < imageBase64Array.length; i += maxImagesPerRequest) {
+          imageBatches.push(imageBase64Array.slice(i, i + maxImagesPerRequest));
+        }
+        
+        // 각 배치별로 Vision 분석 수행
+        for (const batch of imageBatches) {
+          try {
+            const visionResponse = await client.messages.create({
+              model: MODEL_SNAPSHOT,
+              max_tokens: 1000,
+              messages: [
+                {
+                  role: 'user',
+                  content: [
+                    {
+                      type: 'text',
+                      text: '이 사진들을 분석하여 원고 작성에 활용할 수 있는 키워드와 인상, 분위기를 간단히 정리해주세요. 각 사진에 대해 1-2문장으로 요약해주세요.',
+                    },
+                    ...batch,
+                  ],
+                },
+              ],
+            });
 
-          const visionText = visionResponse.content[0].type === 'text' ? visionResponse.content[0].text : '';
-          imageDescriptions = visionText.split('\n').filter((line) => line.trim().length > 0);
-        } catch (visionError: any) {
-          console.error('Vision 처리 오류:', visionError);
-          // Vision 실패해도 계속 진행
-          if (visionError.status === 401 || visionError.status === 403) {
-            const key = getClientApiKey(client);
-            if (key) {
-              markKeyAsError(key);
+            const visionText = visionResponse.content[0].type === 'text' ? visionResponse.content[0].text : '';
+            const batchDescriptions = visionText.split('\n').filter((line) => line.trim().length > 0);
+            imageDescriptions.push(...batchDescriptions);
+          } catch (visionError: any) {
+            console.error('Vision 처리 오류:', visionError);
+            
+            // 413 에러인 경우 이미지를 더 작게 리사이즈해서 재시도
+            if (visionError.status === 413) {
+              console.warn('요청 크기 초과 (413), 이미지를 더 작게 리사이즈하여 재시도');
+              try {
+                // 더 작은 배치로 재시도 (한 번에 1개씩)
+                for (const singleImage of batch) {
+                  try {
+                    const singleVisionResponse = await client.messages.create({
+                      model: MODEL_SNAPSHOT,
+                      max_tokens: 1000,
+                      messages: [
+                        {
+                          role: 'user',
+                          content: [
+                            {
+                              type: 'text',
+                              text: '이 사진을 분석하여 원고 작성에 활용할 수 있는 키워드와 인상, 분위기를 간단히 정리해주세요. 1-2문장으로 요약해주세요.',
+                            },
+                            singleImage,
+                          ],
+                        },
+                      ],
+                    });
+                    
+                    const singleVisionText = singleVisionResponse.content[0].type === 'text' ? singleVisionResponse.content[0].text : '';
+                    const singleDescriptions = singleVisionText.split('\n').filter((line) => line.trim().length > 0);
+                    imageDescriptions.push(...singleDescriptions);
+                  } catch (singleError: any) {
+                    console.error('개별 이미지 Vision 처리 오류:', singleError);
+                    // 개별 이미지도 실패하면 스킵
+                  }
+                }
+              } catch (retryError) {
+                console.error('재시도 오류:', retryError);
+              }
+            } else if (visionError.status === 401 || visionError.status === 403) {
+              const key = getClientApiKey(client);
+              if (key) {
+                markKeyAsError(key);
+              }
             }
+            // 다른 에러는 스킵하고 계속 진행
           }
         }
       }
