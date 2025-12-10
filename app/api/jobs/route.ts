@@ -320,36 +320,113 @@ async function processJobAsync(
           } catch (visionError: any) {
             console.error('Vision 처리 오류:', visionError);
             
+            // 크레딧 부족 에러 확인
+            const visionErrorMessage = visionError.message || '';
+            const visionErrorBody = visionError.error || {};
+            const isVisionCreditError = 
+              visionError.status === 400 && 
+              (visionErrorMessage.includes('credit balance is too low') || 
+               visionErrorMessage.includes('credit') ||
+               visionErrorBody.type === 'invalid_request_error' && visionErrorMessage.includes('credit'));
+            
+            // 크레딧 부족이면 해당 키를 에러 상태로 표시하고 다른 키로 재시도
+            if (isVisionCreditError) {
+              const visionKey = getClientApiKey(client);
+              if (visionKey) {
+                markKeyAsError(visionKey);
+                console.warn(`Vision API 키 에러 상태로 표시 (크레딧 부족): ${visionKey.substring(0, 20)}...`);
+              }
+              
+              // 다른 키로 재시도
+              const newClient = getAnthropicClient();
+              try {
+                const retryVisionResponse = await newClient.messages.create({
+                  model: MODEL_SNAPSHOT,
+                  max_tokens: 1000,
+                  messages: [
+                    {
+                      role: 'user',
+                      content: [
+                        {
+                          type: 'text',
+                          text: '이 사진들을 분석하여 원고 작성에 활용할 수 있는 키워드와 인상, 분위기를 간단히 정리해주세요. 각 사진에 대해 1-2문장으로 요약해주세요.',
+                        },
+                        ...batch,
+                      ],
+                    },
+                  ],
+                });
+                
+                const retryVisionText = retryVisionResponse.content[0].type === 'text' ? retryVisionResponse.content[0].text : '';
+                const retryBatchDescriptions = retryVisionText.split('\n').filter((line) => line.trim().length > 0);
+                imageDescriptions.push(...retryBatchDescriptions);
+                continue; // 성공했으면 다음 배치로
+              } catch (retryError: any) {
+                console.error('Vision 재시도 오류:', retryError);
+                // 재시도도 실패하면 스킵
+              }
+            }
+            
             // 413 에러인 경우 이미지를 더 작게 리사이즈해서 재시도
             if (visionError.status === 413) {
               console.warn('요청 크기 초과 (413), 이미지를 더 작게 리사이즈하여 재시도');
               try {
                 // 더 작은 배치로 재시도 (한 번에 1개씩)
+                let currentClient = client;
                 for (const singleImage of batch) {
-                  try {
-                    const singleVisionResponse = await client.messages.create({
-                      model: MODEL_SNAPSHOT,
-                      max_tokens: 1000,
-                      messages: [
-                        {
-                          role: 'user',
-                          content: [
-                            {
-                              type: 'text',
-                              text: '이 사진을 분석하여 원고 작성에 활용할 수 있는 키워드와 인상, 분위기를 간단히 정리해주세요. 1-2문장으로 요약해주세요.',
-                            },
-                            singleImage,
-                          ],
-                        },
-                      ],
-                    });
-                    
-                    const singleVisionText = singleVisionResponse.content[0].type === 'text' ? singleVisionResponse.content[0].text : '';
-                    const singleDescriptions = singleVisionText.split('\n').filter((line) => line.trim().length > 0);
-                    imageDescriptions.push(...singleDescriptions);
-                  } catch (singleError: any) {
-                    console.error('개별 이미지 Vision 처리 오류:', singleError);
-                    // 개별 이미지도 실패하면 스킵
+                  let singleRetryCount = 0;
+                  const maxSingleRetries = 5;
+                  
+                  while (singleRetryCount < maxSingleRetries) {
+                    try {
+                      const singleVisionResponse = await currentClient.messages.create({
+                        model: MODEL_SNAPSHOT,
+                        max_tokens: 1000,
+                        messages: [
+                          {
+                            role: 'user',
+                            content: [
+                              {
+                                type: 'text',
+                                text: '이 사진을 분석하여 원고 작성에 활용할 수 있는 키워드와 인상, 분위기를 간단히 정리해주세요. 1-2문장으로 요약해주세요.',
+                              },
+                              singleImage,
+                            ],
+                          },
+                        ],
+                      });
+                      
+                      const singleVisionText = singleVisionResponse.content[0].type === 'text' ? singleVisionResponse.content[0].text : '';
+                      const singleDescriptions = singleVisionText.split('\n').filter((line) => line.trim().length > 0);
+                      imageDescriptions.push(...singleDescriptions);
+                      break; // 성공했으면 다음 이미지로
+                    } catch (singleError: any) {
+                      singleRetryCount++;
+                      console.error(`개별 이미지 Vision 처리 오류 (시도 ${singleRetryCount}):`, singleError);
+                      
+                      // 크레딧 부족 또는 인증 에러인 경우 다른 키로 재시도
+                      const singleErrorMessage = singleError.message || '';
+                      const singleErrorBody = singleError.error || {};
+                      const isSingleCreditError = 
+                        singleError.status === 400 && 
+                        (singleErrorMessage.includes('credit balance is too low') || 
+                         singleErrorMessage.includes('credit') ||
+                         singleErrorBody.type === 'invalid_request_error' && singleErrorMessage.includes('credit'));
+                      
+                      if (singleError.status === 401 || singleError.status === 403 || isSingleCreditError) {
+                        const singleKey = getClientApiKey(currentClient);
+                        if (singleKey) {
+                          markKeyAsError(singleKey);
+                          console.warn(`개별 이미지 Vision API 키 에러 상태로 표시: ${singleKey.substring(0, 20)}...`);
+                        }
+                        currentClient = getAnthropicClient(); // 다른 키로 재시도
+                      }
+                      
+                      if (singleRetryCount >= maxSingleRetries) {
+                        console.error('개별 이미지 Vision 처리 최대 재시도 초과, 스킵');
+                        break; // 다음 이미지로
+                      }
+                    }
                   }
                 }
               } catch (retryError) {
@@ -359,6 +436,36 @@ async function processJobAsync(
               const key = getClientApiKey(client);
               if (key) {
                 markKeyAsError(key);
+                console.warn(`Vision API 키 에러 상태로 표시 (인증 실패): ${key.substring(0, 20)}...`);
+              }
+              
+              // 다른 키로 재시도
+              const newClient = getAnthropicClient();
+              try {
+                const retryVisionResponse = await newClient.messages.create({
+                  model: MODEL_SNAPSHOT,
+                  max_tokens: 1000,
+                  messages: [
+                    {
+                      role: 'user',
+                      content: [
+                        {
+                          type: 'text',
+                          text: '이 사진들을 분석하여 원고 작성에 활용할 수 있는 키워드와 인상, 분위기를 간단히 정리해주세요. 각 사진에 대해 1-2문장으로 요약해주세요.',
+                        },
+                        ...batch,
+                      ],
+                    },
+                  ],
+                });
+                
+                const retryVisionText = retryVisionResponse.content[0].type === 'text' ? retryVisionResponse.content[0].text : '';
+                const retryBatchDescriptions = retryVisionText.split('\n').filter((line) => line.trim().length > 0);
+                imageDescriptions.push(...retryBatchDescriptions);
+                continue; // 성공했으면 다음 배치로
+              } catch (retryError: any) {
+                console.error('Vision 재시도 오류:', retryError);
+                // 재시도도 실패하면 스킵
               }
             }
             // 다른 에러는 스킵하고 계속 진행
@@ -381,11 +488,11 @@ async function processJobAsync(
       stylePreset,
     });
 
-    // 5. 원고 생성
-    const anthropicClient = getAnthropicClient();
+    // 5. 원고 생성 (크레딧 부족 시 다른 키로 자동 전환)
+    let anthropicClient = getAnthropicClient();
     let articleContent = '';
     let retryCount = 0;
-    const maxRetries = 3;
+    const maxRetries = 10; // 모든 키를 시도할 수 있도록 증가
 
     while (retryCount < maxRetries) {
       try {
@@ -406,19 +513,36 @@ async function processJobAsync(
         retryCount++;
         console.error(`원고 생성 시도 ${retryCount} 실패:`, apiError);
         
-        if (apiError.status === 401 || apiError.status === 403) {
+        // 에러 메시지에서 크레딧 부족 확인
+        const errorMessage = apiError.message || '';
+        const errorBody = apiError.error || {};
+        const isCreditError = 
+          apiError.status === 400 && 
+          (errorMessage.includes('credit balance is too low') || 
+           errorMessage.includes('credit') ||
+           errorBody.type === 'invalid_request_error' && errorMessage.includes('credit'));
+        
+        // 401, 403, 또는 크레딧 부족 에러인 경우 해당 키를 에러 상태로 표시
+        if (apiError.status === 401 || apiError.status === 403 || isCreditError) {
           const key = getClientApiKey(anthropicClient);
           if (key) {
             markKeyAsError(key);
+            console.warn(`API 키 에러 상태로 표시 (크레딧 부족 또는 인증 실패): ${key.substring(0, 20)}...`);
           }
+          
+          // 다른 키로 재시도하기 위해 새로운 클라이언트 생성
+          anthropicClient = getAnthropicClient();
+          console.log(`다른 API 키로 재시도 (시도 ${retryCount + 1}/${maxRetries})`);
         }
 
         if (retryCount >= maxRetries) {
-          throw new Error(`원고 생성 실패: ${apiError.message}`);
+          throw new Error(`원고 생성 실패: 모든 API 키를 시도했지만 실패했습니다. ${apiError.message}`);
         }
         
-        // 재시도 전 대기
-        await new Promise((resolve) => setTimeout(resolve, 1000 * retryCount));
+        // 재시도 전 대기 (크레딧 부족이 아닌 경우에만)
+        if (!isCreditError) {
+          await new Promise((resolve) => setTimeout(resolve, 1000 * retryCount));
+        }
       }
     }
 
