@@ -308,17 +308,10 @@ export function buildPrompt(input: BuildPromptInput): string {
   prompt += `- 문장들을 두서없이 나열하지 말 것\n`;
   prompt += `- 제목에 "~후기" 단어 사용 금지\n\n`;
 
-  // 10. 플레이스 링크 삽입 위치 결정
+  // 10. 플레이스 링크 삽입 위치 결정 (항상 맨 아래로 고정)
   if (placeUrl) {
-    const insertPosition = Math.floor(Math.random() * 3); // 0: 상단, 1: 중간, 2: 하단
-    if (insertPosition === 0) {
-      prompt += `[플레이스 링크]\n글 상단에 다음 링크를 자연스럽게 포함해주세요: ${placeUrl}\n\n`;
-    } else if (insertPosition === 1) {
-      const randomPhrase = placeLinkInsertPhrases[Math.floor(Math.random() * placeLinkInsertPhrases.length)];
-      prompt += `[플레이스 링크]\n본문 중간(2~3단락)에 다음 문구와 함께 링크를 자연스럽게 포함해주세요: "${randomPhrase}" ${placeUrl}\n\n`;
-    } else {
-      prompt += `[플레이스 링크]\n글 마지막에 다음 링크를 자연스럽게 포함해주세요: ${placeUrl}\n\n`;
-    }
+    const randomPhrase = placeLinkInsertPhrases[Math.floor(Math.random() * placeLinkInsertPhrases.length)];
+    prompt += `[플레이스 링크]\n글 마지막에 다음 문구와 함께 링크를 자연스럽게 포함해주세요: "${randomPhrase}" ${placeUrl}\n\n`;
   }
 
   // 11. 추가 프롬프트
