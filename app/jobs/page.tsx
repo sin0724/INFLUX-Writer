@@ -281,6 +281,37 @@ export default function JobsPage() {
     }
   };
 
+  // 마감일 계산 (생성일 + 5일)
+  const getDeadline = (createdAt: string): Date => {
+    const createdDate = new Date(createdAt);
+    const deadline = new Date(createdDate);
+    deadline.setDate(deadline.getDate() + 5);
+    return deadline;
+  };
+
+  // 마감일이 지났거나 오늘인지 확인 (5일째 되는 날부터 표시)
+  const shouldShowDeadline = (createdAt: string): boolean => {
+    const deadline = getDeadline(createdAt);
+    const today = new Date();
+    
+    // 날짜만 비교 (시간 제외)
+    const deadlineDate = new Date(deadline.getFullYear(), deadline.getMonth(), deadline.getDate());
+    const todayDate = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    
+    // 마감일이 오늘이거나 지났을 때만 표시 (5일째 되는 날부터)
+    return todayDate.getTime() >= deadlineDate.getTime();
+  };
+
+  // 마감일 포맷팅
+  const formatDeadline = (createdAt: string): string => {
+    const deadline = getDeadline(createdAt);
+    return deadline.toLocaleDateString('ko-KR', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    });
+  };
+
   const toggleBatchExpanded = (batchId: string) => {
     setExpandedBatches((prev) => {
       const newSet = new Set(prev);
@@ -628,13 +659,14 @@ export default function JobsPage() {
                 <th className="px-5 py-4 text-left text-sm font-bold text-gray-700">생성자</th>
                 <th className="px-5 py-4 text-left text-sm font-bold text-gray-700">다운로드</th>
                 <th className="px-5 py-4 text-left text-sm font-bold text-gray-700">생성일</th>
+                <th className="px-5 py-4 text-left text-sm font-bold text-gray-700">마감일</th>
                 <th className="px-5 py-4 text-left text-sm font-bold text-gray-700">작업</th>
               </tr>
             </thead>
             <tbody>
               {jobGroups.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="px-5 py-12 text-center">
+                  <td colSpan={10} className="px-5 py-12 text-center">
                     <p className="text-gray-500 text-base font-medium">
                       {searchQuery || downloadFilter !== 'all' ? '검색 결과가 없습니다.' : '생성된 작업이 없습니다.'}
                     </p>
@@ -726,6 +758,15 @@ export default function JobsPage() {
                             </span>
                           </td>
                           <td className="px-5 py-4">
+                            {shouldShowDeadline(firstJob.created_at) ? (
+                              <span className="inline-flex items-center px-3 py-1 bg-red-100 text-red-800 rounded-lg text-sm font-semibold">
+                                {formatDeadline(firstJob.created_at)}
+                              </span>
+                            ) : (
+                              <span className="text-sm text-gray-400">-</span>
+                            )}
+                          </td>
+                          <td className="px-5 py-4">
                             <div className="flex items-center gap-2">
                               <button
                                 onClick={() => group.batch_id && handleBatchDownload(group.batch_id, firstJob.client_name || null)}
@@ -808,6 +849,15 @@ export default function JobsPage() {
                             <span className="text-sm text-gray-600">
                               {new Date(job.created_at).toLocaleString('ko-KR')}
                             </span>
+                          </td>
+                          <td className="px-5 py-4">
+                            {shouldShowDeadline(job.created_at) ? (
+                              <span className="inline-flex items-center px-3 py-1 bg-red-100 text-red-800 rounded-lg text-sm font-semibold">
+                                {formatDeadline(job.created_at)}
+                              </span>
+                            ) : (
+                              <span className="text-sm text-gray-400">-</span>
+                            )}
                           </td>
                           <td className="px-5 py-4">
                             <div className="flex items-center gap-2">
