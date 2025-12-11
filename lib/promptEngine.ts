@@ -234,6 +234,39 @@ export function buildPrompt(input: BuildPromptInput): string {
     stylePreset,
   } = input;
 
+  // 현재 날짜 및 계절 정보
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = now.getMonth() + 1; // 1-12
+  const day = now.getDate();
+  
+  // 계절 판단
+  let season = '';
+  let seasonDescription = '';
+  let weatherDescription = '';
+  
+  if (month >= 3 && month <= 5) {
+    season = '봄';
+    seasonDescription = '봄철';
+    weatherDescription = '따뜻하고 쾌적한 날씨';
+  } else if (month >= 6 && month <= 8) {
+    season = '여름';
+    seasonDescription = '여름철';
+    weatherDescription = '더운 날씨';
+  } else if (month >= 9 && month <= 11) {
+    season = '가을';
+    seasonDescription = '가을철';
+    weatherDescription = '선선하고 쾌적한 날씨';
+  } else {
+    season = '겨울';
+    seasonDescription = '겨울철';
+    if (month === 12 || month === 1) {
+      weatherDescription = '추운 날씨';
+    } else {
+      weatherDescription = '춥고 쌀쌀한 날씨';
+    }
+  }
+
   let prompt = '';
 
   // 1. 기본 지시사항 (AI 티 제거)
@@ -294,11 +327,22 @@ export function buildPrompt(input: BuildPromptInput): string {
   const selectedPersona = personaTypes[Math.floor(Math.random() * personaTypes.length)];
   const selectedStructure = sentenceStructureTypes[Math.floor(Math.random() * sentenceStructureTypes.length)];
   const selectedTone = toneTypes[Math.floor(Math.random() * toneTypes.length)];
-  const selectedOpeningHook = openingHookTypes[Math.floor(Math.random() * openingHookTypes.length)];
+  let selectedOpeningHook = openingHookTypes[Math.floor(Math.random() * openingHookTypes.length)];
   const patternCount = Math.floor(Math.random() * 4) + 4;
   const selectedPatterns = [...sentencePatternTypes]
     .sort(() => Math.random() - 0.5)
     .slice(0, patternCount);
+  
+  // 날씨/계절 관련 서론 화두인 경우 실제 날짜 정보로 대체
+  if (selectedOpeningHook.includes('날씨/계절')) {
+    selectedOpeningHook = `날씨/계절 언급 - 현재는 ${year}년 ${month}월 ${day}일 ${seasonDescription}입니다. "${month}월의 ${weatherDescription}를 느끼며", "요즘 ${season} 날씨가 ~해서" 등 현재 날짜와 계절에 맞는 자연스러운 표현을 사용하세요.`;
+  }
+  
+  prompt += `[현재 날짜 정보]\n`;
+  prompt += `작성일: ${year}년 ${month}월 ${day}일\n`;
+  prompt += `계절: ${season} (${seasonDescription})\n`;
+  prompt += `날씨 특징: ${weatherDescription}\n`;
+  prompt += `⚠️ 날씨/계절 언급 시 반드시 위 날짜와 계절 정보를 기준으로 작성하세요.\n\n`;
   
   prompt += `[작성 스타일 - 각 원고마다 다르게]\n`;
   prompt += `페르소나: ${selectedPersona}\n`;
