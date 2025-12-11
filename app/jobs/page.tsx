@@ -36,7 +36,7 @@ export default function JobsPage() {
   const [filterType, setFilterType] = useState<'all' | 'client' | 'creator' | 'downloader' | 'content'>('all');
   const [downloadFilter, setDownloadFilter] = useState<'downloaded' | 'not_downloaded'>('not_downloaded');
   const [confirmationFilter, setConfirmationFilter] = useState<'all' | 'requires_confirmation' | 'no_confirmation'>('all');
-  const [statusFilter, setStatusFilter] = useState<'all' | 'error'>('all');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'error' | 'processing'>('all');
   const [retryingJobIds, setRetryingJobIds] = useState<Set<string>>(new Set());
   const [currentUser, setCurrentUser] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
@@ -757,6 +757,16 @@ export default function JobsPage() {
                   }`}
                 >
                   전체
+                </button>
+                <button
+                  onClick={() => setStatusFilter('processing')}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                    statusFilter === 'processing'
+                      ? 'bg-yellow-500 text-white shadow-md'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  }`}
+                >
+                  처리중
                 </button>
                 <button
                   onClick={() => setStatusFilter('error')}
