@@ -416,10 +416,14 @@ export default function JobDetailPage() {
                 </>
               )}
             </div>
-            {job.error_message && (
-              <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded">
+            {(job.error_message || job.status === 'processing' || job.status === 'pending') && (
+              <div className={`mt-4 p-3 border rounded ${job.error_message ? 'bg-red-50 border-red-200' : 'bg-yellow-50 border-yellow-200'}`}>
                 <div className="flex justify-between items-start">
-                  <p className="text-sm text-red-800">오류: {job.error_message}</p>
+                  {job.error_message ? (
+                    <p className="text-sm text-red-800">오류: {job.error_message}</p>
+                  ) : (
+                    <p className="text-sm text-yellow-800">처리 중인 작업입니다. 원고 작성이 진행되지 않으면 재생성할 수 있습니다.</p>
+                  )}
                   <button
                     onClick={async () => {
                       if (!confirm('이 작업을 재생성하시겠습니까?')) {

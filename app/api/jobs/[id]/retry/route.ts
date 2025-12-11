@@ -20,9 +20,9 @@ export async function POST(
       return NextResponse.json({ error: '작업을 찾을 수 없습니다.' }, { status: 404 });
     }
 
-    // 2. 오류 상태인지 확인
-    if (job.status !== 'error') {
-      return NextResponse.json({ error: '오류 상태인 작업만 재생성할 수 있습니다.' }, { status: 400 });
+    // 2. 재생성 가능한 상태인지 확인 (오류 또는 처리중/대기 상태)
+    if (job.status !== 'error' && job.status !== 'processing' && job.status !== 'pending') {
+      return NextResponse.json({ error: '오류, 처리중, 대기 상태인 작업만 재생성할 수 있습니다.' }, { status: 400 });
     }
 
     // 3. 이미지 경로 조회

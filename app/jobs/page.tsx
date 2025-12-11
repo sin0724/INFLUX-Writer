@@ -1113,7 +1113,7 @@ export default function JobsPage() {
                                   {downloadingJobIds.has(job.id) ? '압축 중...' : 'ZIP 다운로드'}
                                 </button>
                               )}
-                              {job.status === 'error' && (
+                              {(job.status === 'error' || job.status === 'processing' || job.status === 'pending') && (
                                 <button
                                   onClick={() => handleRetryJob(job.id)}
                                   disabled={retryingJobIds.has(job.id)}
