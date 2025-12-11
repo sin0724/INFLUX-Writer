@@ -32,9 +32,9 @@ export default function JobsPage() {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterType, setFilterType] = useState<'all' | 'client' | 'creator' | 'downloader' | 'content'>('all');
-  const [downloadFilter, setDownloadFilter] = useState<'all' | 'downloaded' | 'not_downloaded'>('all');
+  const [downloadFilter, setDownloadFilter] = useState<'downloaded' | 'not_downloaded'>('not_downloaded');
   const [confirmationFilter, setConfirmationFilter] = useState<'all' | 'requires_confirmation' | 'no_confirmation'>('all');
-  const [statusFilter, setStatusFilter] = useState<'all' | 'done' | 'error' | 'processing' | 'pending'>('all');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'error'>('all');
   const [retryingJobIds, setRetryingJobIds] = useState<Set<string>>(new Set());
   const [currentUser, setCurrentUser] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
@@ -639,16 +639,6 @@ export default function JobsPage() {
                   전체
                 </button>
                 <button
-                  onClick={() => setStatusFilter('done')}
-                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                    statusFilter === 'done'
-                      ? 'bg-green-600 text-white shadow-md'
-                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                  }`}
-                >
-                  완료
-                </button>
-                <button
                   onClick={() => setStatusFilter('error')}
                   className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
                     statusFilter === 'error'
@@ -658,42 +648,12 @@ export default function JobsPage() {
                 >
                   오류
                 </button>
-                <button
-                  onClick={() => setStatusFilter('processing')}
-                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                    statusFilter === 'processing'
-                      ? 'bg-yellow-500 text-white shadow-md'
-                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                  }`}
-                >
-                  처리 중
-                </button>
-                <button
-                  onClick={() => setStatusFilter('pending')}
-                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                    statusFilter === 'pending'
-                      ? 'bg-gray-500 text-white shadow-md'
-                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                  }`}
-                >
-                  대기
-                </button>
               </div>
             </div>
             {/* 다운로드 상태 필터 */}
             <div className="flex items-center gap-3">
               <label className="text-sm font-semibold text-gray-700">다운로드 상태</label>
               <div className="flex gap-2">
-                <button
-                  onClick={() => setDownloadFilter('all')}
-                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                    downloadFilter === 'all'
-                      ? 'bg-blue-600 text-white shadow-md'
-                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                  }`}
-                >
-                  전체
-                </button>
                 <button
                   onClick={() => setDownloadFilter('not_downloaded')}
                   className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
@@ -759,12 +719,12 @@ export default function JobsPage() {
                     onChange={(e) => setSearchQuery(e.target.value)}
                     className="flex-1 px-4 py-2.5 border-2 border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   />
-                  {(searchQuery || downloadFilter !== 'all' || statusFilter !== 'all' || confirmationFilter !== 'all') && (
+                  {(searchQuery || statusFilter !== 'all' || confirmationFilter !== 'all') && (
                     <button
                       onClick={() => {
                         setSearchQuery('');
                         setFilterType('all');
-                        setDownloadFilter('all');
+                        setDownloadFilter('not_downloaded');
                         setStatusFilter('all');
                         setConfirmationFilter('all');
                       }}
@@ -805,7 +765,7 @@ export default function JobsPage() {
                 <tr>
                   <td colSpan={10} className="px-5 py-12 text-center">
                     <p className="text-gray-500 text-base font-medium">
-                      {searchQuery || downloadFilter !== 'all' ? '검색 결과가 없습니다.' : '생성된 작업이 없습니다.'}
+                      {searchQuery || statusFilter !== 'all' || confirmationFilter !== 'all' ? '검색 결과가 없습니다.' : '생성된 작업이 없습니다.'}
                     </p>
                   </td>
                 </tr>
