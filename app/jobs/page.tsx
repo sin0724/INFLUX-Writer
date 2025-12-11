@@ -29,6 +29,8 @@ export default function JobsPage() {
   const [filteredJobs, setFilteredJobs] = useState<JobWithClient[]>([]);
   const [jobGroups, setJobGroups] = useState<JobGroup[]>([]);
   const [expandedBatches, setExpandedBatches] = useState<Set<string>>(new Set());
+  const [expandedJobs, setExpandedJobs] = useState<Set<string>>(new Set());
+  const [downloadingJobIds, setDownloadingJobIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterType, setFilterType] = useState<'all' | 'client' | 'creator' | 'downloader' | 'content'>('all');
@@ -330,6 +332,124 @@ export default function JobsPage() {
       }
       return newSet;
     });
+  };
+
+  const toggleJobExpanded = (jobId: string) => {
+    setExpandedJobs((prev) => {
+      const newSet = new Set(prev);
+      if (newSet.has(jobId)) {
+        newSet.delete(jobId);
+      } else {
+        newSet.add(jobId);
+      }
+      return newSet;
+    });
+  };
+
+  const handleSingleJobDownload = async (jobId: string, clientName: string | null) => {
+    if (!currentUser) {
+      alert('로그인이 필요합니다.');
+      return;
+    }
+
+    setDownloadingJobIds((prev) => new Set(prev).add(jobId));
+
+    try {
+      // 작업 상세 정보 가져오기
+      const res = await fetch(`/api/jobs/${jobId}`);
+      if (!res.ok) {
+        throw new Error('작업 조회 실패');
+      }
+      const data = await res.json();
+
+      if (!data.article?.content || !data.client) {
+        if (data.job?.status === 'error') {
+          alert('오류가 발생한 작업입니다. 재생성 후 다운로드할 수 있습니다.');
+        } else {
+          alert('다운로드할 원고가 없습니다.');
+        }
+        return;
+      }
+
+      if (data.job?.status === 'error') {
+        alert('오류가 발생한 작업입니다. 재생성 후 다운로드할 수 있습니다.');
+        return;
+      }
+
+      const zip = new JSZip();
+      const date = new Date();
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const day = String(date.getDate()).padStart(2, '0');
+      const dateStr = `${year}${month}${day}`;
+
+      // 원고 텍스트 파일 추가
+      zip.file(`${data.client.name}_${dateStr}.txt`, data.article.content);
+
+      // 이미지 병렬 다운로드
+      if (data.images && data.images.length > 0) {
+        const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+        
+        const imagePromises = data.images.map(async (img: any, i: number) => {
+          const imageUrl = `${supabaseUrl}/storage/v1/object/public/job-images/${img.storage_path}`;
+          try {
+            const response = await fetch(imageUrl);
+            if (response.ok) {
+              const blob = await response.blob();
+              const fileName = img.storage_path.split('/').pop() || `image_${i + 1}.jpg`;
+              return { fileName, blob };
+            }
+          } catch (error) {
+            console.error(`이미지 다운로드 실패 (${img.storage_path}):`, error);
+          }
+          return null;
+        });
+
+        const imageResults = await Promise.all(imagePromises);
+        
+        imageResults.forEach((result) => {
+          if (result) {
+            zip.file(`images/${result.fileName}`, result.blob);
+          }
+        });
+      }
+
+      // ZIP 파일 생성 및 다운로드
+      const zipBlob = await zip.generateAsync({ 
+        type: 'blob',
+        compression: 'DEFLATE',
+        compressionOptions: { level: 6 }
+      });
+      
+      const url = URL.createObjectURL(zipBlob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${data.client.name}_${dateStr}.zip`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+
+      // 다운로드 정보 업데이트
+      await fetch(`/api/jobs/${jobId}/download`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ downloaded_by: currentUser }),
+      });
+
+      // 작업 목록 새로고침
+      const shouldIncludeContent = filterType === 'content' || filterType === 'all';
+      await fetchJobs(shouldIncludeContent);
+    } catch (error) {
+      console.error('개별 작업 다운로드 오류:', error);
+      alert(`다운로드 중 오류가 발생했습니다: ${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      setDownloadingJobIds((prev) => {
+        const next = new Set(prev);
+        next.delete(jobId);
+        return next;
+      });
+    }
   };
 
   const handleDeleteJob = async (jobId: string, jobName: string) => {
@@ -882,25 +1002,40 @@ export default function JobsPage() {
                           </td>
                         </tr>
                       ) : null}
-                      {(!isBatch || isExpanded) && group.jobs.map((job, index) => (
-                        <tr
-                          key={job.id}
-                          className={`border-t ${
-                            job.downloaded_by
-                              ? 'bg-green-50 hover:bg-green-100'
-                              : 'bg-yellow-50 hover:bg-yellow-100'
-                          } ${isBatch ? 'border-l-4 border-l-blue-400 pl-2' : ''}`}
-                        >
-                          <td className="px-5 py-4">
-                            {isBatch ? (
-                              <div className="flex items-center gap-2">
-                                <span className="text-blue-500 font-bold text-lg">└</span>
-                                <span className="font-semibold text-gray-900">{job.client_name || '-'}</span>
-                              </div>
-                            ) : (
-                              <span className="font-semibold text-gray-900">{job.client_name || '-'}</span>
-                            )}
-                          </td>
+                      {(!isBatch || isExpanded) && group.jobs.map((job, index) => {
+                        const isJobExpanded = !isBatch ? expandedJobs.has(job.id) : false;
+                        return (
+                          <React.Fragment key={job.id}>
+                            <tr
+                              className={`border-t ${
+                                job.downloaded_by
+                                  ? 'bg-green-50 hover:bg-green-100'
+                                  : 'bg-yellow-50 hover:bg-yellow-100'
+                              } ${isBatch ? 'border-l-4 border-l-blue-400 pl-2' : ''}`}
+                            >
+                              <td className="px-5 py-4">
+                                {isBatch ? (
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-blue-500 font-bold text-lg">└</span>
+                                    <span className="font-semibold text-gray-900">{job.client_name || '-'}</span>
+                                  </div>
+                                ) : (
+                                  <button
+                                    onClick={() => toggleJobExpanded(job.id)}
+                                    className="flex items-center gap-2 hover:opacity-80 transition-opacity"
+                                  >
+                                    <svg
+                                      className={`w-5 h-5 text-blue-700 transition-transform ${isJobExpanded ? 'rotate-90' : ''}`}
+                                      fill="none"
+                                      stroke="currentColor"
+                                      viewBox="0 0 24 24"
+                                    >
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                                    </svg>
+                                    <span className="font-semibold text-gray-900">{job.client_name || '-'}</span>
+                                  </button>
+                                )}
+                              </td>
                           <td className="px-5 py-4">
                             <span className="inline-flex items-center px-3 py-1 bg-blue-100 text-blue-800 rounded-lg text-sm font-semibold">
                               1건
@@ -959,12 +1094,15 @@ export default function JobsPage() {
                           </td>
                           <td className="px-5 py-4">
                             <div className="flex items-center gap-2">
-                              <Link
-                                href={`/jobs/${job.id}`}
-                                className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-semibold hover:bg-blue-700 active:bg-blue-800 shadow-md transition-all"
-                              >
-                                상세보기
-                              </Link>
+                              {!isBatch && (
+                                <button
+                                  onClick={() => handleSingleJobDownload(job.id, job.client_name || null)}
+                                  disabled={downloadingJobIds.has(job.id) || job.status !== 'done'}
+                                  className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-semibold hover:bg-blue-700 active:bg-blue-800 disabled:bg-gray-400 disabled:cursor-not-allowed shadow-md transition-all whitespace-nowrap"
+                                >
+                                  {downloadingJobIds.has(job.id) ? '압축 중...' : 'ZIP 다운로드'}
+                                </button>
+                              )}
                               {job.status === 'error' && (
                                 <button
                                   onClick={() => handleRetryJob(job.id)}
@@ -983,7 +1121,72 @@ export default function JobsPage() {
                             </div>
                           </td>
                         </tr>
-                      ))}
+                        {!isBatch && isJobExpanded && (
+                          <tr className="bg-gray-50 border-t border-gray-200">
+                            <td colSpan={10} className="px-5 py-4">
+                              <div className="bg-white rounded-lg p-4 shadow-sm border border-gray-200">
+                                <div className="flex justify-between items-start mb-4">
+                                  <h3 className="text-lg font-semibold text-gray-900">작업 상세 정보</h3>
+                                  <Link
+                                    href={`/jobs/${job.id}`}
+                                    className="inline-flex items-center px-3 py-1.5 bg-blue-600 text-white rounded-lg text-sm font-semibold hover:bg-blue-700 transition-all"
+                                  >
+                                    전체 상세보기
+                                  </Link>
+                                </div>
+                                <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
+                                  <div>
+                                    <p className="text-gray-600 font-medium">업체명</p>
+                                    <p className="text-gray-900">{job.client_name || '-'}</p>
+                                  </div>
+                                  <div>
+                                    <p className="text-gray-600 font-medium">글 타입</p>
+                                    <p className="text-gray-900">{job.content_type === 'review' ? '후기형' : '정보형'}</p>
+                                  </div>
+                                  <div>
+                                    <p className="text-gray-600 font-medium">원고 길이</p>
+                                    <p className="text-gray-900">{job.length_hint}자</p>
+                                  </div>
+                                  <div>
+                                    <p className="text-gray-600 font-medium">상태</p>
+                                    <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-semibold ${getStatusColor(job.status)}`}>
+                                      {getStatusText(job.status)}
+                                    </span>
+                                  </div>
+                                  <div>
+                                    <p className="text-gray-600 font-medium">생성자</p>
+                                    <p className="text-gray-900">{job.created_by || '-'}</p>
+                                  </div>
+                                  <div>
+                                    <p className="text-gray-600 font-medium">생성일</p>
+                                    <p className="text-gray-900">{new Date(job.created_at).toLocaleString('ko-KR')}</p>
+                                  </div>
+                                  {job.downloaded_by && (
+                                    <div>
+                                      <p className="text-gray-600 font-medium">다운로드한 사람</p>
+                                      <p className="text-gray-900">{job.downloaded_by}</p>
+                                    </div>
+                                  )}
+                                  {job.downloaded_at && (
+                                    <div>
+                                      <p className="text-gray-600 font-medium">다운로드일</p>
+                                      <p className="text-gray-900">{new Date(job.downloaded_at).toLocaleDateString('ko-KR')}</p>
+                                    </div>
+                                  )}
+                                  {job.error_message && (
+                                    <div className="col-span-full">
+                                      <p className="text-gray-600 font-medium">오류 메시지</p>
+                                      <p className="text-red-600 bg-red-50 p-2 rounded mt-1">{job.error_message}</p>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </React.Fragment>
+                      );
+                    })}
                     </React.Fragment>
                   );
                 })
