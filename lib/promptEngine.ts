@@ -300,7 +300,11 @@ export function buildPrompt(input: BuildPromptInput): string {
   prompt += `5. 글 시작 부분에 이슈 얘기, 인사, 날씨 얘기 등을 자연스럽게 포함하여 진짜 블로거가 쓴 것처럼 작성하세요.\n`;
   prompt += `6. 기승전결 구조에 맞춰 자연스럽게 이어지게 작성하세요.\n`;
   prompt += `7. 사진과 요청사항을 제대로 참고하여 작성하세요.\n`;
-  prompt += `8. 길이: 약 ${lengthHint}자 정도로 작성하세요.\n\n`;
+  prompt += `8. 길이: 약 ${lengthHint}자 정도로 작성하세요.\n`;
+  if (placeUrl) {
+    prompt += `9. 플레이스 링크는 반드시 글의 가장 마지막 문단에만 포함하세요. 중간이나 앞부분에는 절대 넣지 마세요.\n`;
+  }
+  prompt += `\n`;
   
   prompt += `[금지사항]\n`;
   prompt += `- "소개해볼까해요", "들려드릴게요" 등 부자연스러운 표현 사용 금지\n`;
@@ -311,7 +315,10 @@ export function buildPrompt(input: BuildPromptInput): string {
   // 10. 플레이스 링크 삽입 위치 결정 (항상 맨 아래로 고정)
   if (placeUrl) {
     const randomPhrase = placeLinkInsertPhrases[Math.floor(Math.random() * placeLinkInsertPhrases.length)];
-    prompt += `[플레이스 링크]\n글 마지막에 다음 문구와 함께 링크를 자연스럽게 포함해주세요: "${randomPhrase}" ${placeUrl}\n\n`;
+    prompt += `[플레이스 링크 - 매우 중요]\n`;
+    prompt += `⚠️ 반드시 글의 가장 마지막 문단에만 다음 문구와 함께 링크를 포함해주세요: "${randomPhrase}" ${placeUrl}\n`;
+    prompt += `⚠️ 절대 글 중간이나 앞부분에 링크를 넣지 마세요. 오직 마지막 문단에만 넣어야 합니다.\n`;
+    prompt += `⚠️ 본문 내용을 모두 작성한 후, 그 다음에 마지막 문단으로 링크를 포함하세요.\n\n`;
   }
 
   // 11. 추가 프롬프트
@@ -325,7 +332,7 @@ export function buildPrompt(input: BuildPromptInput): string {
   prompt += `문장 리듬은 규칙적이지 않게 변주하고, 같은 표현을 반복하지 마라.\n`;
   prompt += `광고 톤·과장 표현·AI 패턴은 절대 사용하지 말라.\n`;
   prompt += `검색엔진(SEO)에 잘 노출되도록 키워드를 자연스럽게 여러 번 활용하되, 인위적인 느낌이 들지 않게 해라.\n`;
-  prompt += `플레이스 링크는 자연스럽게 녹여내되, 광고처럼 보이지 않게 해라.\n`;
+  prompt += `플레이스 링크는 반드시 글의 가장 마지막 문단에만 포함하고, 중간이나 앞부분에는 절대 넣지 마라. 자연스럽게 녹여내되, 광고처럼 보이지 않게 해라.\n`;
   prompt += `진짜 블로거가 쓴 것처럼 자연스럽고 진정성 있게 작성하라.\n\n`;
 
   // 13. 최종 요청
