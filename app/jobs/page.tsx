@@ -38,6 +38,7 @@ export default function JobsPage() {
   const [confirmationFilter, setConfirmationFilter] = useState<'all' | 'requires_confirmation' | 'no_confirmation'>('all');
   const [statusFilter, setStatusFilter] = useState<'all' | 'error' | 'processing'>('all');
   const [retryingJobIds, setRetryingJobIds] = useState<Set<string>>(new Set());
+  const [retriedJobIds, setRetriedJobIds] = useState<Set<string>>(new Set()); // 재생성된 작업 추적
   const [currentUser, setCurrentUser] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [authChecked, setAuthChecked] = useState(false);
@@ -283,7 +284,12 @@ export default function JobsPage() {
     }
   };
 
-  const getStatusText = (status: string) => {
+  const getStatusText = (status: string, jobId?: string) => {
+    // 재생성된 작업인 경우
+    if (jobId && retriedJobIds.has(jobId) && status === 'processing') {
+      return '재생성 처리중';
+    }
+    
     switch (status) {
       case 'done':
         return '완료';
@@ -536,6 +542,9 @@ export default function JobsPage() {
         throw new Error(error.error || '재생성 실패');
       }
 
+      // 재생성된 작업으로 표시
+      setRetriedJobIds((prev) => new Set(prev).add(jobId));
+      
       alert('작업이 재생성되었습니다. 처리 상태를 확인해주세요.');
       
       // 작업 목록 새로고침
@@ -1093,7 +1102,7 @@ export default function JobsPage() {
                           </td>
                           <td className="px-5 py-4">
                             <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold ${getStatusColor(job.status)}`}>
-                              {getStatusText(job.status)}
+                              {getStatusText(job.status, job.id)}
                             </span>
                           </td>
                           <td className="px-5 py-4">
@@ -1192,7 +1201,7 @@ export default function JobsPage() {
                                   <div>
                                     <p className="text-gray-600 font-medium">상태</p>
                                     <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-semibold ${getStatusColor(job.status)}`}>
-                                      {getStatusText(job.status)}
+                                      {getStatusText(job.status, job.id)}
                                     </span>
                                   </div>
                                   <div>
