@@ -75,10 +75,15 @@ export default function JobsPage() {
     }
   }, [authChecked]);
 
-  // filterType이 변경될 때 원고 내용 포함 여부 결정
+  // filterType이 변경될 때 원고 내용 포함 여부 결정 (원고 내용 검색으로 변경 시에만 서버 요청)
   useEffect(() => {
-    const shouldIncludeContent = filterType === 'content' || filterType === 'all';
-    fetchJobs(shouldIncludeContent);
+    // 원고 내용 검색으로 변경할 때만 서버에서 데이터 가져오기
+    if (filterType === 'content') {
+      const hasContent = jobs.length > 0 && jobs.some((job: any) => job.article_content);
+      if (!hasContent) {
+        fetchJobs(true);
+      }
+    }
   }, [filterType]);
 
   // 검색 필터링 및 그룹화
@@ -241,7 +246,7 @@ export default function JobsPage() {
         매칭된_작업: matchedJobs.length,
       });
     }
-  }, [searchQuery, filterType, downloadFilter, confirmationFilter, jobs]);
+  }, [searchQuery, filterType, downloadFilter, confirmationFilter, statusFilter, jobs]);
 
   const fetchJobs = async (includeContent: boolean = false) => {
     try {
@@ -713,7 +718,10 @@ export default function JobsPage() {
               <label className="text-sm font-semibold text-gray-700">업체 유형</label>
               <div className="flex gap-2">
                 <button
-                  onClick={() => setConfirmationFilter('all')}
+                  onClick={() => {
+                    setConfirmationFilter('all');
+                    setCurrentPage(1);
+                  }}
                   className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
                     confirmationFilter === 'all'
                       ? 'bg-blue-600 text-white shadow-md'
@@ -723,7 +731,10 @@ export default function JobsPage() {
                   전체
                 </button>
                 <button
-                  onClick={() => setConfirmationFilter('requires_confirmation')}
+                  onClick={() => {
+                    setConfirmationFilter('requires_confirmation');
+                    setCurrentPage(1);
+                  }}
                   className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
                     confirmationFilter === 'requires_confirmation'
                       ? 'bg-purple-600 text-white shadow-md'
@@ -733,7 +744,10 @@ export default function JobsPage() {
                   컨펌 필요 업체
                 </button>
                 <button
-                  onClick={() => setConfirmationFilter('no_confirmation')}
+                  onClick={() => {
+                    setConfirmationFilter('no_confirmation');
+                    setCurrentPage(1);
+                  }}
                   className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
                     confirmationFilter === 'no_confirmation'
                       ? 'bg-green-600 text-white shadow-md'
@@ -749,7 +763,10 @@ export default function JobsPage() {
               <label className="text-sm font-semibold text-gray-700">작업 상태</label>
               <div className="flex gap-2">
                 <button
-                  onClick={() => setStatusFilter('all')}
+                  onClick={() => {
+                    setStatusFilter('all');
+                    setCurrentPage(1);
+                  }}
                   className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
                     statusFilter === 'all'
                       ? 'bg-blue-600 text-white shadow-md'
@@ -759,7 +776,10 @@ export default function JobsPage() {
                   전체
                 </button>
                 <button
-                  onClick={() => setStatusFilter('processing')}
+                  onClick={() => {
+                    setStatusFilter('processing');
+                    setCurrentPage(1);
+                  }}
                   className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
                     statusFilter === 'processing'
                       ? 'bg-yellow-500 text-white shadow-md'
@@ -769,7 +789,10 @@ export default function JobsPage() {
                   처리중
                 </button>
                 <button
-                  onClick={() => setStatusFilter('error')}
+                  onClick={() => {
+                    setStatusFilter('error');
+                    setCurrentPage(1);
+                  }}
                   className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
                     statusFilter === 'error'
                       ? 'bg-red-600 text-white shadow-md'
@@ -785,7 +808,10 @@ export default function JobsPage() {
               <label className="text-sm font-semibold text-gray-700">다운로드 상태</label>
               <div className="flex gap-2">
                 <button
-                  onClick={() => setDownloadFilter('not_downloaded')}
+                  onClick={() => {
+                    setDownloadFilter('not_downloaded');
+                    setCurrentPage(1);
+                  }}
                   className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
                     downloadFilter === 'not_downloaded'
                       ? 'bg-yellow-500 text-white shadow-md'
@@ -795,7 +821,10 @@ export default function JobsPage() {
                   담당자 확인 필요
                 </button>
                 <button
-                  onClick={() => setDownloadFilter('downloaded')}
+                  onClick={() => {
+                    setDownloadFilter('downloaded');
+                    setCurrentPage(1);
+                  }}
                   className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
                     downloadFilter === 'downloaded'
                       ? 'bg-green-600 text-white shadow-md'
@@ -817,11 +846,13 @@ export default function JobsPage() {
                       const newFilterType = e.target.value as 'all' | 'client' | 'creator' | 'downloader' | 'content';
                       setFilterType(newFilterType);
                       setSearchQuery('');
-                      // 원고 내용 검색으로 변경 시 content 포함하여 다시 조회
-                      if (newFilterType === 'content' || newFilterType === 'all') {
-                        fetchJobs(true);
-                      } else {
-                        fetchJobs(false);
+                      setCurrentPage(1); // 필터 타입 변경 시 첫 페이지로
+                      // 원고 내용 검색으로 변경 시에만 서버에서 데이터 가져오기
+                      if (newFilterType === 'content') {
+                        const hasContent = jobs.length > 0 && jobs.some((job: any) => job.article_content);
+                        if (!hasContent) {
+                          fetchJobs(true);
+                        }
                       }
                     }}
                     className="px-4 py-2.5 border-2 border-gray-300 rounded-lg text-sm font-medium focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
@@ -857,6 +888,7 @@ export default function JobsPage() {
                         setDownloadFilter('not_downloaded');
                         setStatusFilter('all');
                         setConfirmationFilter('all');
+                        setCurrentPage(1);
                       }}
                       className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-300 transition-all"
                     >
