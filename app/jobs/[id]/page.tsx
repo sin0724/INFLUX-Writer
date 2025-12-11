@@ -186,7 +186,16 @@ export default function JobDetailPage() {
 
   const handleDownloadZip = async () => {
     if (!article?.content || !client) {
-      alert('다운로드할 원고가 없습니다.');
+      if (job?.status === 'error') {
+        alert('오류가 발생한 작업입니다. 재생성 후 다운로드할 수 있습니다.');
+      } else {
+        alert('다운로드할 원고가 없습니다.');
+      }
+      return;
+    }
+
+    if (job?.status === 'error') {
+      alert('오류가 발생한 작업입니다. 재생성 후 다운로드할 수 있습니다.');
       return;
     }
 
@@ -409,7 +418,33 @@ export default function JobDetailPage() {
             </div>
             {job.error_message && (
               <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded">
-                <p className="text-sm text-red-800">오류: {job.error_message}</p>
+                <div className="flex justify-between items-start">
+                  <p className="text-sm text-red-800">오류: {job.error_message}</p>
+                  <button
+                    onClick={async () => {
+                      if (!confirm('이 작업을 재생성하시겠습니까?')) {
+                        return;
+                      }
+                      try {
+                        const res = await fetch(`/api/jobs/${jobId}/retry`, {
+                          method: 'POST',
+                        });
+                        if (!res.ok) {
+                          const error = await res.json();
+                          throw new Error(error.error || '재생성 실패');
+                        }
+                        alert('작업이 재생성되었습니다. 처리 상태를 확인해주세요.');
+                        await fetchJobDetail();
+                      } catch (error) {
+                        console.error('작업 재생성 오류:', error);
+                        alert(`작업 재생성 중 오류가 발생했습니다: ${error instanceof Error ? error.message : String(error)}`);
+                      }
+                    }}
+                    className="ml-4 px-4 py-2 bg-orange-600 text-white rounded-lg text-sm font-semibold hover:bg-orange-700 active:bg-orange-800 shadow-md transition-all whitespace-nowrap"
+                  >
+                    재생성
+                  </button>
+                </div>
               </div>
             )}
           </div>

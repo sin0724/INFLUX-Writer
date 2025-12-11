@@ -34,6 +34,8 @@ export default function JobsPage() {
   const [filterType, setFilterType] = useState<'all' | 'client' | 'creator' | 'downloader' | 'content'>('all');
   const [downloadFilter, setDownloadFilter] = useState<'all' | 'downloaded' | 'not_downloaded'>('all');
   const [confirmationFilter, setConfirmationFilter] = useState<'all' | 'requires_confirmation' | 'no_confirmation'>('all');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'done' | 'error' | 'processing' | 'pending'>('all');
+  const [retryingJobIds, setRetryingJobIds] = useState<Set<string>>(new Set());
   const [currentUser, setCurrentUser] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [authChecked, setAuthChecked] = useState(false);
@@ -86,6 +88,11 @@ export default function JobsPage() {
       filtered = filtered.filter((job) => job.client_requires_confirmation === true);
     } else if (confirmationFilter === 'no_confirmation') {
       filtered = filtered.filter((job) => job.client_requires_confirmation === false);
+    }
+
+    // 상태 필터
+    if (statusFilter !== 'all') {
+      filtered = filtered.filter((job) => job.status === statusFilter);
     }
 
     // 다운로드 여부 필터 (배치 작업도 포함)
@@ -387,6 +394,40 @@ export default function JobsPage() {
     }
   };
 
+  const handleRetryJob = async (jobId: string) => {
+    if (!confirm('이 작업을 재생성하시겠습니까?')) {
+      return;
+    }
+
+    setRetryingJobIds((prev) => new Set(prev).add(jobId));
+
+    try {
+      const res = await fetch(`/api/jobs/${jobId}/retry`, {
+        method: 'POST',
+      });
+
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.error || '재생성 실패');
+      }
+
+      alert('작업이 재생성되었습니다. 처리 상태를 확인해주세요.');
+      
+      // 작업 목록 새로고침
+      const shouldIncludeContent = filterType === 'content' || filterType === 'all';
+      await fetchJobs(shouldIncludeContent);
+    } catch (error) {
+      console.error('작업 재생성 오류:', error);
+      alert(`작업 재생성 중 오류가 발생했습니다: ${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      setRetryingJobIds((prev) => {
+        const next = new Set(prev);
+        next.delete(jobId);
+        return next;
+      });
+    }
+  };
+
   const handleBatchDownload = async (batchId: string, clientName: string | null) => {
     if (!currentUser) {
       alert('로그인이 필요합니다.');
@@ -405,13 +446,27 @@ export default function JobsPage() {
       const data = await res.json();
       const batchJobs = data.jobs || [];
 
-      // 완료된 작업만 필터링
-      const completedJobs = batchJobs.filter((item: any) => item.article !== null);
+      // 완료된 작업만 필터링 (오류 작업 제외)
+      const completedJobs = batchJobs.filter((item: any) => item.article !== null && item.job.status === 'done');
+      const errorJobs = batchJobs.filter((item: any) => item.job.status === 'error');
 
       if (completedJobs.length === 0) {
-        alert('다운로드할 완료된 원고가 없습니다.');
+        if (errorJobs.length > 0) {
+          alert(`다운로드할 완료된 원고가 없습니다.\n오류가 발생한 작업이 ${errorJobs.length}개 있습니다. 오류 작업은 재생성 후 다운로드할 수 있습니다.`);
+        } else {
+          alert('다운로드할 완료된 원고가 없습니다.');
+        }
         setDownloadingBatchId(null);
         return;
+      }
+
+      // 오류 작업이 있으면 알림 표시
+      if (errorJobs.length > 0) {
+        const message = `배치에 오류가 발생한 작업이 ${errorJobs.length}개 있습니다.\n완료된 ${completedJobs.length}개 작업만 다운로드됩니다.\n오류 작업은 재생성 후 다운로드할 수 있습니다.`;
+        if (!confirm(message)) {
+          setDownloadingBatchId(null);
+          return;
+        }
       }
 
       // 배치 내 모든 작업의 다운로드 정보 업데이트 (병렬 처리)
@@ -569,6 +624,62 @@ export default function JobsPage() {
                 </button>
               </div>
             </div>
+            {/* 작업 상태 필터 */}
+            <div className="flex items-center gap-3">
+              <label className="text-sm font-semibold text-gray-700">작업 상태</label>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setStatusFilter('all')}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                    statusFilter === 'all'
+                      ? 'bg-blue-600 text-white shadow-md'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  }`}
+                >
+                  전체
+                </button>
+                <button
+                  onClick={() => setStatusFilter('done')}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                    statusFilter === 'done'
+                      ? 'bg-green-600 text-white shadow-md'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  }`}
+                >
+                  완료
+                </button>
+                <button
+                  onClick={() => setStatusFilter('error')}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                    statusFilter === 'error'
+                      ? 'bg-red-600 text-white shadow-md'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  }`}
+                >
+                  오류
+                </button>
+                <button
+                  onClick={() => setStatusFilter('processing')}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                    statusFilter === 'processing'
+                      ? 'bg-yellow-500 text-white shadow-md'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  }`}
+                >
+                  처리 중
+                </button>
+                <button
+                  onClick={() => setStatusFilter('pending')}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                    statusFilter === 'pending'
+                      ? 'bg-gray-500 text-white shadow-md'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  }`}
+                >
+                  대기
+                </button>
+              </div>
+            </div>
             {/* 다운로드 상태 필터 */}
             <div className="flex items-center gap-3">
               <label className="text-sm font-semibold text-gray-700">다운로드 상태</label>
@@ -648,12 +759,14 @@ export default function JobsPage() {
                     onChange={(e) => setSearchQuery(e.target.value)}
                     className="flex-1 px-4 py-2.5 border-2 border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   />
-                  {(searchQuery || downloadFilter !== 'all') && (
+                  {(searchQuery || downloadFilter !== 'all' || statusFilter !== 'all' || confirmationFilter !== 'all') && (
                     <button
                       onClick={() => {
                         setSearchQuery('');
                         setFilterType('all');
                         setDownloadFilter('all');
+                        setStatusFilter('all');
+                        setConfirmationFilter('all');
                       }}
                       className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-300 transition-all"
                     >
@@ -892,6 +1005,15 @@ export default function JobsPage() {
                               >
                                 상세보기
                               </Link>
+                              {job.status === 'error' && (
+                                <button
+                                  onClick={() => handleRetryJob(job.id)}
+                                  disabled={retryingJobIds.has(job.id)}
+                                  className="inline-flex items-center px-4 py-2 bg-orange-600 text-white rounded-lg text-sm font-semibold hover:bg-orange-700 active:bg-orange-800 disabled:bg-gray-400 disabled:cursor-not-allowed shadow-md transition-all"
+                                >
+                                  {retryingJobIds.has(job.id) ? '재생성 중...' : '재생성'}
+                                </button>
+                              )}
                               <button
                                 onClick={() => handleDeleteJob(job.id, job.client_name || '작업')}
                                 className="inline-flex items-center px-4 py-2 bg-red-600 text-white rounded-lg text-sm font-semibold hover:bg-red-700 active:bg-red-800 shadow-md transition-all"

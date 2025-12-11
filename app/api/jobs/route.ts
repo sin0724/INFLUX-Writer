@@ -140,7 +140,7 @@ export async function POST(request: NextRequest) {
   }
 }
 
-async function processJobAsync(
+export async function processJobAsync(
   jobId: string,
   clientId: string,
   stylePresetId: string | null,
