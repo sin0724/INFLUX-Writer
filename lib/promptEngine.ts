@@ -106,6 +106,42 @@ const categoryStyles: Record<Category, { tone: string; structure: string; rules:
   },
 };
 
+// 페르소나 유형 (각 원고마다 다른 페르소나 적용)
+const personaTypes = [
+  '감성적이고 섬세한 블로거 - 느낌과 감정을 중심으로 서술',
+  '실용적이고 객관적인 리뷰어 - 사실과 경험을 중심으로 서술',
+  '탐험가 스타일 - 호기심과 발견을 중심으로 서술',
+  '친구처럼 편안한 블로거 - 대화하듯이 자연스럽게 서술',
+  '전문가 관점 - 지식과 경험을 바탕으로 서술',
+  '일상 기록자 - 일상의 순간을 담담하게 서술',
+  '여행자 마인드 - 새로운 경험을 즐기는 관점으로 서술',
+  '디테일 관찰자 - 세부사항과 변화를 집중적으로 서술',
+];
+
+// 문장구조 유형 (각 원고마다 다른 구조 적용)
+const sentenceStructureTypes = [
+  '서술형 중심 - 시간 순서대로 자연스럽게 서술',
+  '묘사형 중심 - 공간과 분위기를 먼저 묘사 후 서술',
+  '대화형 중심 - 독자와 대화하듯이 서술',
+  '관찰형 중심 - 관찰한 내용을 중심으로 서술',
+  '경험형 중심 - 경험한 순서대로 서술',
+  '비교형 중심 - 전후 비교를 중심으로 서술',
+  '감정형 중심 - 느낌과 감정 변화를 중심으로 서술',
+  '정보형 중심 - 정보를 체계적으로 서술',
+];
+
+// 말투 유형 (각 원고마다 다른 말투 적용)
+const toneTypes = [
+  '구어체 중심 (70%) - "~했어요", "~였어요", "~거든요" 등 자연스러운 구어체',
+  '문어체 중심 (70%) - "~했습니다", "~였습니다" 등 정중한 문어체',
+  '혼합형 (50:50) - 구어체와 문어체를 자연스럽게 혼합',
+  '캐주얼 구어체 (80%) - "~해요", "~거예요" 등 매우 편안한 구어체',
+  '정중한 문어체 (80%) - "~했습니다", "~였습니다" 등 매우 정중한 문어체',
+  '대화형 구어체 - 독자에게 직접 말하듯이 "~하시면", "~보시면" 등',
+  '일상 대화형 - 친구에게 말하듯이 "~했는데", "~였는데" 등',
+  '중립형 - 구어체와 문어체를 균형있게 사용',
+];
+
 // 문장 패턴 30개 (AI 티 제거용 - 패턴 유형 지시)
 const sentencePatternTypes = [
   '짧은 문장 후 긴 문장 조합',
@@ -231,8 +267,12 @@ export function buildPrompt(input: BuildPromptInput): string {
     prompt += `세부사항: ${style.details}\n\n`;
   }
 
-  // 4. 가이드 텍스트
-  prompt += `[가이드]\n${guideText}\n\n`;
+  // 4. 가이드 텍스트 (기본 가이드)
+  prompt += `[기본 가이드]\n${guideText}\n`;
+  if (humanExtraPrompt) {
+    prompt += `\n⚠️ 참고: 아래에 추가 요청사항이 있을 경우, 추가 요청사항이 기본 가이드보다 우선적으로 적용됩니다.\n`;
+  }
+  prompt += `\n`;
 
   // 4-1. 키워드 (있는 경우)
   if (keywords && keywords.trim()) {
@@ -251,13 +291,26 @@ export function buildPrompt(input: BuildPromptInput): string {
     prompt += `예: X "화이트 톤의 공간이며 조명이 밝다." → O "전체적으로 빛이 부드럽게 퍼져서 분위기가 깨끗하게 느껴졌다."\n\n`;
   }
 
-  // 6. 문장 패턴 랜덤 적용 (4~7개) - AI 패턴 차단 장치
+  // 6. 페르소나, 문장구조, 말투 랜덤 선택 (각 원고마다 다르게)
+  const selectedPersona = personaTypes[Math.floor(Math.random() * personaTypes.length)];
+  const selectedStructure = sentenceStructureTypes[Math.floor(Math.random() * sentenceStructureTypes.length)];
+  const selectedTone = toneTypes[Math.floor(Math.random() * toneTypes.length)];
+  
+  prompt += `[페르소나 및 작성 스타일 - 매우 중요]\n`;
+  prompt += `⚠️⚠️⚠️ 이 원고는 다음 페르소나와 스타일로 작성해야 합니다:\n`;
+  prompt += `페르소나: ${selectedPersona}\n`;
+  prompt += `문장구조: ${selectedStructure}\n`;
+  prompt += `말투: ${selectedTone}\n`;
+  prompt += `⚠️⚠️⚠️ 다른 원고들과 절대 동일한 페르소나, 문장구조, 말투를 사용하지 마세요. 각 원고마다 완전히 다른 스타일로 작성해야 합니다.\n\n`;
+
+  // 6-1. 문장 패턴 랜덤 적용 (4~7개) - AI 패턴 차단 장치
   const patternCount = Math.floor(Math.random() * 4) + 4; // 4~7개
   const selectedPatterns = [...sentencePatternTypes]
     .sort(() => Math.random() - 0.5)
     .slice(0, patternCount);
   prompt += `[문장 리듬 변주 - AI 패턴 차단]\n다음 문장 패턴 유형들을 자연스럽게 적용하여 문장 리듬을 인간처럼 불규칙하게 만들어라:\n${selectedPatterns.map((p, i) => `${i + 1}. ${p}`).join('\n')}\n`;
-  prompt += `목적: 동일 문장 패턴 반복을 차단하고, 문장의 리듬을 인간 수준으로 변주한다.\n\n`;
+  prompt += `목적: 동일 문장 패턴 반복을 차단하고, 문장의 리듬을 인간 수준으로 변주한다.\n`;
+  prompt += `⚠️ 다른 원고들과 다른 패턴 조합을 사용하여 완전히 다른 문장 리듬을 만들어야 합니다.\n\n`;
 
   // 7. 콘텐츠 타입별 자연스러운 톤 규칙
   if (contentType === 'review') {
@@ -347,9 +400,13 @@ export function buildPrompt(input: BuildPromptInput): string {
     }
   }
 
-  // 11. 추가 프롬프트
+  // 11. 추가 프롬프트 (우선순위 최우선)
   if (humanExtraPrompt) {
-    prompt += `[추가 요청사항]\n${humanExtraPrompt}\n\n`;
+    prompt += `[추가 요청사항 - 최우선 적용]\n`;
+    prompt += `⚠️⚠️⚠️ 매우 중요: 아래 추가 요청사항은 기본 가이드보다 우선적으로 적용되어야 합니다.\n`;
+    prompt += `⚠️⚠️⚠️ 추가 요청사항과 기본 가이드가 충돌하는 경우, 추가 요청사항을 우선적으로 따르세요.\n`;
+    prompt += `⚠️⚠️⚠️ 추가 요청사항을 반드시 반영하여 작성하세요.\n\n`;
+    prompt += `${humanExtraPrompt}\n\n`;
   }
 
   // 12. AI 티 제거용 필수 프롬프트 문구
@@ -358,6 +415,8 @@ export function buildPrompt(input: BuildPromptInput): string {
   prompt += `문장 리듬은 규칙적이지 않게 변주하고, 같은 표현을 반복하지 마라.\n`;
   prompt += `광고 톤·과장 표현·AI 패턴은 절대 사용하지 말라.\n`;
   prompt += `검색엔진(SEO)에 잘 노출되도록 키워드를 자연스럽게 여러 번 활용하되, 인위적인 느낌이 들지 않게 해라.\n`;
+  prompt += `⚠️⚠️⚠️ 매우 중요: 여러 개의 원고가 작성될 때는 각 원고마다 완전히 다른 페르소나, 문장구조, 말투, 문장 패턴을 사용해야 합니다.\n`;
+  prompt += `⚠️⚠️⚠️ 다른 원고와 동일한 스타일이나 패턴을 사용하면 안 됩니다. 각 원고는 독립적이고 고유한 스타일을 가져야 합니다.\n`;
   prompt += `플레이스 링크는 반드시 글의 가장 첫 번째 문단(제목 바로 다음) 또는 가장 마지막 문단 중 하나에만 포함하고, 중간에는 절대 넣지 마라.\n`;
   prompt += `링크는 자연스러운 문맥 안에 포함하되, "더 많은 정보는 여기서 확인하실 수 있습니다", "여기를 클릭해보세요", "자세한 정보는 여기서", "이곳을 방문해보세요" 같은 부자연스러운 문구는 절대 사용하지 마라.\n`;
   prompt += `링크만 개별적으로 넣어두는 것처럼 자연스럽게 포함하되, 광고나 홍보 문구 없이 링크 자체만 자연스럽게 넣어라.\n`;
