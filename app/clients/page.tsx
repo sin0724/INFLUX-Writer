@@ -17,6 +17,7 @@ export default function ClientsPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 20;
   const [authChecked, setAuthChecked] = useState(false);
+  const [currentUserRole, setCurrentUserRole] = useState<'super_admin' | 'admin' | null>(null);
   const [formData, setFormData] = useState({
     name: '',
     place_url: '',
@@ -63,6 +64,7 @@ export default function ClientsPage() {
         router.push('/login');
         return;
       }
+      setCurrentUserRole(session.role || 'admin');
       setAuthChecked(true);
       fetchClients();
     } catch (error) {
@@ -104,6 +106,10 @@ export default function ClientsPage() {
   };
 
   const handleEdit = (client: Client) => {
+    if (currentUserRole !== 'super_admin') {
+      alert('수정 권한이 없습니다. 슈퍼 어드민만 수정할 수 있습니다.');
+      return;
+    }
     setEditingClient(client);
     setFormData({
       name: client.name,
@@ -132,6 +138,11 @@ export default function ClientsPage() {
   };
 
   const handleDelete = async (clientId: string, clientName: string) => {
+    if (currentUserRole !== 'super_admin') {
+      alert('삭제 권한이 없습니다. 슈퍼 어드민만 삭제할 수 있습니다.');
+      return;
+    }
+
     if (!confirm(`"${clientName}" 업체를 정말 삭제하시겠습니까? 관련된 모든 작업과 원고도 함께 삭제되며 복구할 수 없습니다.`)) {
       return;
     }
@@ -159,14 +170,18 @@ export default function ClientsPage() {
     try {
       let res;
       if (editingClient) {
-        // 수정
+        // 수정 - 슈퍼 어드민만 가능
+        if (currentUserRole !== 'super_admin') {
+          alert('수정 권한이 없습니다. 슈퍼 어드민만 수정할 수 있습니다.');
+          return;
+        }
         res = await fetch(`/api/clients/${editingClient.id}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(formData),
         });
       } else {
-        // 등록
+        // 등록 - 일반 어드민은 중복 체크 필요
         res = await fetch('/api/clients', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -189,7 +204,8 @@ export default function ClientsPage() {
         fetchClients();
         alert(editingClient ? '업체 정보가 수정되었습니다.' : '업체가 등록되었습니다.');
       } else {
-        alert(editingClient ? '업체 수정에 실패했습니다.' : '업체 등록에 실패했습니다.');
+        const errorData = await res.json();
+        alert(errorData.error || (editingClient ? '업체 수정에 실패했습니다.' : '업체 등록에 실패했습니다.'));
       }
     } catch (error) {
       console.error('업체 처리 오류:', error);
@@ -397,26 +413,34 @@ export default function ClientsPage() {
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex gap-2">
-                        <button
-                          onClick={() => handleEdit(client)}
-                          className="text-blue-600 hover:underline"
-                        >
-                          수정
-                        </button>
-                        <span className="text-gray-300">|</span>
+                        {currentUserRole === 'super_admin' && (
+                          <>
+                            <button
+                              onClick={() => handleEdit(client)}
+                              className="text-blue-600 hover:underline"
+                            >
+                              수정
+                            </button>
+                            <span className="text-gray-300">|</span>
+                          </>
+                        )}
                         <Link
                           href={`/jobs/new?client_id=${client.id}`}
                           className="text-blue-600 hover:underline"
                         >
                           작업 생성
                         </Link>
-                        <span className="text-gray-300">|</span>
-                        <button
-                          onClick={() => handleDelete(client.id, client.name)}
-                          className="text-red-600 hover:underline"
-                        >
-                          삭제
-                        </button>
+                        {currentUserRole === 'super_admin' && (
+                          <>
+                            <span className="text-gray-300">|</span>
+                            <button
+                              onClick={() => handleDelete(client.id, client.name)}
+                              className="text-red-600 hover:underline"
+                            >
+                              삭제
+                            </button>
+                          </>
+                        )}
                       </div>
                     </td>
                   </tr>

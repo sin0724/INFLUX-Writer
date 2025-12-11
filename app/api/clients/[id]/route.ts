@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
+import { getServerSession } from '@/lib/auth';
 
 export async function GET(
   request: NextRequest,
@@ -27,6 +28,16 @@ export async function DELETE(
   { params }: { params: { id: string } }
 ) {
   try {
+    // 세션 확인 및 권한 체크
+    const session = await getServerSession();
+    if (!session) {
+      return NextResponse.json({ error: '인증이 필요합니다.' }, { status: 401 });
+    }
+
+    if (session.role !== 'super_admin') {
+      return NextResponse.json({ error: '삭제 권한이 없습니다. 슈퍼 어드민만 삭제할 수 있습니다.' }, { status: 403 });
+    }
+
     const clientId = params.id;
 
     // 클라이언트 삭제 (CASCADE로 관련 jobs, articles도 자동 삭제됨)
@@ -51,6 +62,16 @@ export async function PATCH(
   { params }: { params: { id: string } }
 ) {
   try {
+    // 세션 확인 및 권한 체크
+    const session = await getServerSession();
+    if (!session) {
+      return NextResponse.json({ error: '인증이 필요합니다.' }, { status: 401 });
+    }
+
+    if (session.role !== 'super_admin') {
+      return NextResponse.json({ error: '수정 권한이 없습니다. 슈퍼 어드민만 수정할 수 있습니다.' }, { status: 403 });
+    }
+
     const body = await request.json();
     const { data, error } = await supabaseAdmin
       .from('clients')
