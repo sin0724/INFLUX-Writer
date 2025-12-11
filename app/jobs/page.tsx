@@ -37,6 +37,7 @@ export default function JobsPage() {
   const [currentUser, setCurrentUser] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [authChecked, setAuthChecked] = useState(false);
+  const [downloadingBatchId, setDownloadingBatchId] = useState<string | null>(null);
   const itemsPerPage = 20;
 
   useEffect(() => {
@@ -392,6 +393,9 @@ export default function JobsPage() {
       return;
     }
 
+    // 즉시 로딩 상태 표시 및 버튼 비활성화
+    setDownloadingBatchId(batchId);
+
     try {
       // 배치 내 모든 작업 조회
       const res = await fetch(`/api/jobs/batch/${batchId}`);
@@ -406,22 +410,23 @@ export default function JobsPage() {
 
       if (completedJobs.length === 0) {
         alert('다운로드할 완료된 원고가 없습니다.');
+        setDownloadingBatchId(null);
         return;
       }
 
-      // 배치 내 모든 작업의 다운로드 정보 업데이트
+      // 배치 내 모든 작업의 다운로드 정보 업데이트 (병렬 처리)
       const jobIds = completedJobs.map((item: any) => item.job.id);
-      for (const jobId of jobIds) {
-        try {
-          await fetch(`/api/jobs/${jobId}/download`, {
+      await Promise.allSettled(
+        jobIds.map((jobId: string) =>
+          fetch(`/api/jobs/${jobId}/download`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ downloaded_by: currentUser }),
-          });
-        } catch (error) {
-          console.error(`작업 ${jobId} 다운로드 정보 업데이트 실패:`, error);
-        }
-      }
+          }).catch((error) => {
+            console.error(`작업 ${jobId} 다운로드 정보 업데이트 실패:`, error);
+          })
+        )
+      );
 
       const zip = new JSZip();
       const date = new Date();
@@ -434,34 +439,51 @@ export default function JobsPage() {
       for (let i = 0; i < completedJobs.length; i++) {
         const item = completedJobs[i];
         
-        // 원고 텍스트 파일 추가
+        // 원고 텍스트 파일 추가 (즉시 처리)
         if (item.article?.content) {
           zip.file(`원고_${i + 1}.txt`, item.article.content);
         }
 
-        // 이미지 추가
+        // 이미지 병렬 다운로드로 속도 향상
         if (item.images && item.images.length > 0) {
           const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
-          for (let j = 0; j < item.images.length; j++) {
-            const img = item.images[j];
+          
+          // 모든 이미지를 병렬로 다운로드
+          const imagePromises = item.images.map(async (img: any, j: number) => {
             const imageUrl = `${supabaseUrl}/storage/v1/object/public/job-images/${img.storage_path}`;
-            
             try {
               const response = await fetch(imageUrl);
               if (response.ok) {
                 const blob = await response.blob();
                 const fileName = img.storage_path.split('/').pop() || `image_${j + 1}.jpg`;
-                zip.file(`원고_${i + 1}_이미지/${fileName}`, blob);
+                return { fileName, blob, jobIndex: i };
               }
             } catch (error) {
               console.error(`이미지 다운로드 실패 (${img.storage_path}):`, error);
             }
-          }
+            return null;
+          });
+
+          // 모든 이미지 다운로드 완료 대기
+          const imageResults = await Promise.all(imagePromises);
+          
+          // ZIP에 이미지 추가
+          imageResults.forEach((result) => {
+            if (result) {
+              zip.file(`원고_${result.jobIndex + 1}_이미지/${result.fileName}`, result.blob);
+            }
+          });
         }
       }
 
       // ZIP 파일 생성 및 다운로드
-      const zipBlob = await zip.generateAsync({ type: 'blob' });
+      const zipBlob = await zip.generateAsync({ 
+        type: 'blob',
+        compression: 'DEFLATE',
+        compressionOptions: { level: 6 } // 적절한 압축 레벨로 속도와 크기 균형
+      });
+      
+      // 즉시 다운로드 시작
       const url = URL.createObjectURL(zipBlob);
       const a = document.createElement('a');
       a.href = url;
@@ -471,13 +493,15 @@ export default function JobsPage() {
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
 
-      // 작업 목록 새로고침
-      await fetchJobs();
+      // 작업 목록 새로고침 (비동기로 처리하여 다운로드 속도에 영향 없음)
+      fetchJobs().catch(console.error);
 
       alert(`${completedJobs.length}개의 원고가 다운로드되었습니다.`);
     } catch (error) {
       console.error('배치 다운로드 오류:', error);
       alert('배치 다운로드 중 오류가 발생했습니다.');
+    } finally {
+      setDownloadingBatchId(null);
     }
   };
 
@@ -770,9 +794,10 @@ export default function JobsPage() {
                             <div className="flex items-center gap-2">
                               <button
                                 onClick={() => group.batch_id && handleBatchDownload(group.batch_id, firstJob.client_name || null)}
-                                className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-semibold hover:bg-blue-700 active:bg-blue-800 shadow-md transition-all whitespace-nowrap"
+                                disabled={downloadingBatchId === group.batch_id}
+                                className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-semibold hover:bg-blue-700 active:bg-blue-800 disabled:bg-gray-400 disabled:cursor-not-allowed shadow-md transition-all whitespace-nowrap"
                               >
-                                ZIP 다운로드
+                                {downloadingBatchId === group.batch_id ? '압축 중...' : 'ZIP 다운로드'}
                               </button>
                               <button
                                 onClick={() => group.batch_id && handleDeleteBatch(group.batch_id, firstJob.client_name || null)}

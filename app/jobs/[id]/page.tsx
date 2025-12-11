@@ -195,6 +195,7 @@ export default function JobDetailPage() {
       return;
     }
 
+    // 즉시 로딩 상태 표시 및 버튼 비활성화
     setDownloadingZip(true);
 
     try {
@@ -205,31 +206,48 @@ export default function JobDetailPage() {
       const day = String(date.getDate()).padStart(2, '0');
       const dateStr = `${year}${month}${day}`;
 
-      // 원고 텍스트 파일 추가
+      // 원고 텍스트 파일 추가 (즉시 처리)
       zip.file(`${client.name}_${dateStr}.txt`, article.content);
 
-      // 이미지 추가
+      // 이미지 병렬 다운로드로 속도 향상
       if (images.length > 0) {
         const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
-        for (let i = 0; i < images.length; i++) {
-          const img = images[i];
+        
+        // 모든 이미지를 병렬로 다운로드
+        const imagePromises = images.map(async (img, i) => {
           const imageUrl = `${supabaseUrl}/storage/v1/object/public/job-images/${img.storage_path}`;
-          
           try {
             const response = await fetch(imageUrl);
             if (response.ok) {
               const blob = await response.blob();
               const fileName = img.storage_path.split('/').pop() || `image_${i + 1}.jpg`;
-              zip.file(`images/${fileName}`, blob);
+              return { fileName, blob };
             }
           } catch (error) {
             console.error(`이미지 다운로드 실패 (${img.storage_path}):`, error);
           }
-        }
+          return null;
+        });
+
+        // 모든 이미지 다운로드 완료 대기
+        const imageResults = await Promise.all(imagePromises);
+        
+        // ZIP에 이미지 추가
+        imageResults.forEach((result) => {
+          if (result) {
+            zip.file(`images/${result.fileName}`, result.blob);
+          }
+        });
       }
 
       // ZIP 파일 생성 및 다운로드
-      const zipBlob = await zip.generateAsync({ type: 'blob' });
+      const zipBlob = await zip.generateAsync({ 
+        type: 'blob',
+        compression: 'DEFLATE',
+        compressionOptions: { level: 6 } // 적절한 압축 레벨로 속도와 크기 균형
+      });
+      
+      // 즉시 다운로드 시작
       const url = URL.createObjectURL(zipBlob);
       const a = document.createElement('a');
       a.href = url;
@@ -239,19 +257,18 @@ export default function JobDetailPage() {
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
 
-      // 다운로드 정보 업데이트
-      try {
-        await fetch(`/api/jobs/${jobId}/download`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ downloaded_by: currentUser }),
-        });
+      // 다운로드 정보 업데이트 (비동기로 처리하여 다운로드 속도에 영향 없음)
+      fetch(`/api/jobs/${jobId}/download`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ downloaded_by: currentUser }),
+      }).then(() => {
         setTimeout(() => {
           fetchJobDetail();
         }, 500);
-      } catch (error) {
+      }).catch((error) => {
         console.error('다운로드 정보 업데이트 오류:', error);
-      }
+      });
     } catch (error) {
       console.error('ZIP 다운로드 오류:', error);
       alert('ZIP 파일 다운로드 중 오류가 발생했습니다.');
