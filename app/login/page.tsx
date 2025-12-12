@@ -16,10 +16,20 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
+      // 입력값 앞뒤 공백 제거
+      const trimmedUsername = username.trim();
+      const trimmedPassword = password.trim();
+
+      if (!trimmedUsername || !trimmedPassword) {
+        setError('아이디와 비밀번호를 입력해주세요.');
+        setLoading(false);
+        return;
+      }
+
       const res = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password }),
+        body: JSON.stringify({ username: trimmedUsername, password: trimmedPassword }),
       });
 
       const data = await res.json();

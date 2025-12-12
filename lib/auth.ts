@@ -17,18 +17,40 @@ export async function verifyPassword(password: string, hash: string): Promise<bo
 }
 
 export async function login(username: string, password: string): Promise<AdminSession | null> {
-  const { data: admin, error } = await supabaseAdmin
-    .from('admins')
-    .select('*')
-    .eq('username', username)
-    .single();
-
-  if (error || !admin) {
+  // username 앞뒤 공백 제거 및 정규화
+  const normalizedUsername = username.trim();
+  
+  if (!normalizedUsername || !password) {
+    console.error('로그인 시도: username 또는 password가 비어있음');
     return null;
   }
 
+  // 데이터베이스에서 사용자 조회
+  const { data: admin, error } = await supabaseAdmin
+    .from('admins')
+    .select('*')
+    .eq('username', normalizedUsername)
+    .single();
+
+  if (error) {
+    // 에러가 있지만 사용자를 찾지 못한 경우 (PGRST116)
+    if (error.code === 'PGRST116') {
+      console.error(`로그인 실패: 사용자를 찾을 수 없음 - username: "${normalizedUsername}"`);
+    } else {
+      console.error('로그인 오류:', error);
+    }
+    return null;
+  }
+
+  if (!admin) {
+    console.error(`로그인 실패: 사용자를 찾을 수 없음 - username: "${normalizedUsername}"`);
+    return null;
+  }
+
+  // 비밀번호 검증
   const isValid = await verifyPassword(password, admin.password_hash);
   if (!isValid) {
+    console.error(`로그인 실패: 비밀번호 불일치 - username: "${normalizedUsername}"`);
     return null;
   }
 

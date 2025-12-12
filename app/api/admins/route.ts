@@ -12,14 +12,34 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { username, password, role } = body;
+    let { username, password, role } = body;
+
+    // username과 password 앞뒤 공백 제거
+    if (username) username = username.trim();
+    if (password) password = password.trim();
 
     if (!username || !password || !role) {
       return NextResponse.json({ error: '필수 정보가 누락되었습니다.' }, { status: 400 });
     }
 
+    // 빈 문자열 체크
+    if (username.length === 0 || password.length === 0) {
+      return NextResponse.json({ error: '아이디와 비밀번호를 입력해주세요.' }, { status: 400 });
+    }
+
     if (role !== 'super_admin' && role !== 'admin') {
       return NextResponse.json({ error: '올바른 역할을 선택해주세요.' }, { status: 400 });
+    }
+
+    // 중복 사용자명 체크
+    const { data: existing } = await supabaseAdmin
+      .from('admins')
+      .select('id, username')
+      .eq('username', username)
+      .single();
+
+    if (existing) {
+      return NextResponse.json({ error: `이미 존재하는 아이디입니다: "${username}"` }, { status: 400 });
     }
 
     // 비밀번호 해시
