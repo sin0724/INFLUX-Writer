@@ -62,14 +62,10 @@ export async function PATCH(
   { params }: { params: { id: string } }
 ) {
   try {
-    // 세션 확인 및 권한 체크
+    // 세션 확인 (모든 어드민 수정 가능)
     const session = await getServerSession();
     if (!session) {
       return NextResponse.json({ error: '인증이 필요합니다.' }, { status: 401 });
-    }
-
-    if (session.role !== 'super_admin') {
-      return NextResponse.json({ error: '수정 권한이 없습니다. 슈퍼 어드민만 수정할 수 있습니다.' }, { status: 403 });
     }
 
     const body = await request.json();

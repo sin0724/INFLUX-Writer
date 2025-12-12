@@ -106,10 +106,6 @@ export default function ClientsPage() {
   };
 
   const handleEdit = (client: Client) => {
-    if (currentUserRole !== 'super_admin') {
-      alert('수정 권한이 없습니다. 슈퍼 어드민만 수정할 수 있습니다.');
-      return;
-    }
     setEditingClient(client);
     setFormData({
       name: client.name,
@@ -170,11 +166,7 @@ export default function ClientsPage() {
     try {
       let res;
       if (editingClient) {
-        // 수정 - 슈퍼 어드민만 가능
-        if (currentUserRole !== 'super_admin') {
-          alert('수정 권한이 없습니다. 슈퍼 어드민만 수정할 수 있습니다.');
-          return;
-        }
+        // 수정 - 모든 어드민 가능
         res = await fetch(`/api/clients/${editingClient.id}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
@@ -413,17 +405,13 @@ export default function ClientsPage() {
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex gap-2">
-                        {currentUserRole === 'super_admin' && (
-                          <>
-                            <button
-                              onClick={() => handleEdit(client)}
-                              className="text-blue-600 hover:underline"
-                            >
-                              수정
-                            </button>
-                            <span className="text-gray-300">|</span>
-                          </>
-                        )}
+                        <button
+                          onClick={() => handleEdit(client)}
+                          className="text-blue-600 hover:underline"
+                        >
+                          수정
+                        </button>
+                        <span className="text-gray-300">|</span>
                         <Link
                           href={`/jobs/new?client_id=${client.id}`}
                           className="text-blue-600 hover:underline"
