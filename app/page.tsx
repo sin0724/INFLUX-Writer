@@ -14,6 +14,7 @@ export default function Home() {
   });
   const [loading, setLoading] = useState(true);
   const [authChecked, setAuthChecked] = useState(false);
+  const [session, setSession] = useState<any>(null);
 
   useEffect(() => {
     checkAuth();
@@ -31,6 +32,7 @@ export default function Home() {
         router.push('/login');
         return;
       }
+      setSession(session);
       setAuthChecked(true);
       fetchDashboardData();
     } catch (error) {
@@ -146,7 +148,7 @@ export default function Home() {
         </div>
 
         {/* 주요 기능 카드 */}
-        <div className="grid md:grid-cols-3 gap-8 max-w-5xl mx-auto">
+        <div className={`grid ${session?.role === 'super_admin' ? 'md:grid-cols-2 lg:grid-cols-4' : 'md:grid-cols-3'} gap-8 max-w-7xl mx-auto`}>
           <Link
             href="/jobs/new"
             className="group bg-white p-8 rounded-2xl shadow-lg hover:shadow-2xl transition-all duration-300 border-2 border-transparent hover:border-blue-500 transform hover:-translate-y-2"
@@ -185,6 +187,21 @@ export default function Home() {
             <h3 className="text-xl font-bold text-gray-900 mb-2">작업 목록</h3>
             <p className="text-gray-600 text-sm">생성된 모든 작업을 확인하고 관리합니다</p>
           </Link>
+
+          {session?.role === 'super_admin' && (
+            <Link
+              href="/stats/creators"
+              className="group bg-white p-8 rounded-2xl shadow-lg hover:shadow-2xl transition-all duration-300 border-2 border-transparent hover:border-orange-500 transform hover:-translate-y-2"
+            >
+              <div className="w-16 h-16 bg-gradient-to-br from-orange-500 to-orange-600 rounded-2xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
+                <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                </svg>
+              </div>
+              <h3 className="text-xl font-bold text-gray-900 mb-2">생성자 통계</h3>
+              <p className="text-gray-600 text-sm">생성자별 작업 현황 및 업무 역량을 확인합니다</p>
+            </Link>
+          )}
         </div>
       </div>
     </div>
