@@ -3,16 +3,16 @@ import { supabaseAdmin } from '@/lib/supabase';
 
 export async function POST(request: NextRequest) {
   try {
-    // 3일 전 날짜 계산
-    const threeDaysAgo = new Date();
-    threeDaysAgo.setDate(threeDaysAgo.getDate() - 3);
-    const threeDaysAgoISO = threeDaysAgo.toISOString();
+    // 14일(2주) 전 날짜 계산
+    const twoWeeksAgo = new Date();
+    twoWeeksAgo.setDate(twoWeeksAgo.getDate() - 14);
+    const twoWeeksAgoISO = twoWeeksAgo.toISOString();
 
-    // 3일 이상 된 이미지 레코드 조회
+    // 14일(2주) 이상 된 이미지 레코드 조회
     const { data: oldImages, error: queryError } = await supabaseAdmin
       .from('job_images')
       .select('*')
-      .lt('created_at', threeDaysAgoISO);
+      .lt('created_at', twoWeeksAgoISO);
 
     if (queryError) {
       console.error('이미지 조회 오류:', queryError);
@@ -52,7 +52,7 @@ export async function POST(request: NextRequest) {
     const { error: deleteError } = await supabaseAdmin
       .from('job_images')
       .delete()
-      .lt('created_at', threeDaysAgoISO);
+      .lt('created_at', twoWeeksAgoISO);
 
     if (deleteError) {
       console.error('DB 레코드 삭제 오류:', deleteError);
