@@ -8,16 +8,16 @@ import sharp from 'sharp';
 // 이미지 자동 정리 함수
 async function cleanupOldImages() {
   try {
-    // 14일(2주) 전 날짜 계산
-    const twoWeeksAgo = new Date();
-    twoWeeksAgo.setDate(twoWeeksAgo.getDate() - 14);
-    const twoWeeksAgoISO = twoWeeksAgo.toISOString();
+    // 10일 전 날짜 계산
+    const tenDaysAgo = new Date();
+    tenDaysAgo.setDate(tenDaysAgo.getDate() - 10);
+    const tenDaysAgoISO = tenDaysAgo.toISOString();
 
-    // 14일(2주) 이상 된 이미지 레코드 조회
+    // 10일 이상 된 이미지 레코드 조회
     const { data: oldImages, error: queryError } = await supabaseAdmin
       .from('job_images')
       .select('*')
-      .lt('created_at', twoWeeksAgoISO);
+      .lt('created_at', tenDaysAgoISO);
 
     if (queryError || !oldImages || oldImages.length === 0) {
       return;
@@ -38,7 +38,7 @@ async function cleanupOldImages() {
     await supabaseAdmin
       .from('job_images')
       .delete()
-      .lt('created_at', twoWeeksAgoISO);
+      .lt('created_at', tenDaysAgoISO);
   } catch (error) {
     console.error('이미지 정리 오류:', error);
   }
