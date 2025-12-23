@@ -586,8 +586,39 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const clientId = searchParams.get('client_id');
     const includeContent = searchParams.get('include_content') === 'true';
+    const statsOnly = searchParams.get('stats') === 'true';
 
-    let query = supabaseAdmin.from('jobs').select('*, clients(name, requires_confirmation)').order('created_at', { ascending: false });
+    // 통계만 필요한 경우 count 쿼리 사용
+    if (statsOnly) {
+      let totalQuery = supabaseAdmin.from('jobs').select('*', { count: 'exact', head: true });
+      let doneQuery = supabaseAdmin.from('jobs').select('*', { count: 'exact', head: true }).eq('status', 'done');
+      let processingQuery = supabaseAdmin.from('jobs').select('*', { count: 'exact', head: true }).in('status', ['processing', 'pending']);
+
+      if (clientId) {
+        totalQuery = totalQuery.eq('client_id', clientId);
+        doneQuery = doneQuery.eq('client_id', clientId);
+        processingQuery = processingQuery.eq('client_id', clientId);
+      }
+
+      const [totalResult, doneResult, processingResult] = await Promise.all([
+        totalQuery,
+        doneQuery,
+        processingQuery,
+      ]);
+
+      return NextResponse.json({
+        totalJobs: totalResult.count || 0,
+        doneJobs: doneResult.count || 0,
+        processingJobs: processingResult.count || 0,
+      });
+    }
+
+    // 일반 조회의 경우 limit 제거 (Supabase 기본 limit 1000건 제한 해제)
+    let query = supabaseAdmin
+      .from('jobs')
+      .select('*, clients(name, requires_confirmation)', { count: 'exact' })
+      .order('created_at', { ascending: false })
+      .limit(10000); // 충분히 큰 값으로 설정
 
     if (clientId) {
       query = query.eq('client_id', clientId);

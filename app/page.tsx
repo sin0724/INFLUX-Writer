@@ -49,16 +49,15 @@ export default function Home() {
 
   const fetchDashboardData = async () => {
     try {
-      // 작업 통계 조회
-      const jobsRes = await fetch('/api/jobs');
-      const jobsData = await jobsRes.json();
-      const jobs = jobsData.jobs || [];
+      // 작업 통계 조회 (count 쿼리 사용)
+      const jobsRes = await fetch('/api/jobs?stats=true');
+      const jobsStats = await jobsRes.json();
       
-      // 통계 계산
+      // 통계 설정
       setStats({
-        totalJobs: jobs.length,
-        doneJobs: jobs.filter((j: any) => j.status === 'done').length,
-        processingJobs: jobs.filter((j: any) => j.status === 'processing' || j.status === 'pending').length,
+        totalJobs: jobsStats.totalJobs || 0,
+        doneJobs: jobsStats.doneJobs || 0,
+        processingJobs: jobsStats.processingJobs || 0,
         totalClients: 0,
       });
 
