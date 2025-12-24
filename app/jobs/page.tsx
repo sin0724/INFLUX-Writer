@@ -45,6 +45,8 @@ export default function JobsPage() {
   const [downloadingBatchId, setDownloadingBatchId] = useState<string | null>(null);
   const [copyingJobIds, setCopyingJobIds] = useState<Set<string>>(new Set()); // 텍스트 복사 중인 작업 ID
   const [copyingBatchId, setCopyingBatchId] = useState<string | null>(null); // 텍스트 복사 중인 배치 ID
+  const [confirmingJobIds, setConfirmingJobIds] = useState<Set<string>>(new Set()); // 확인 완료 중인 작업 ID
+  const [confirmingBatchId, setConfirmingBatchId] = useState<string | null>(null); // 확인 완료 중인 배치 ID
   const itemsPerPage = 20;
 
   useEffect(() => {
@@ -442,17 +444,6 @@ export default function JobsPage() {
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
-
-      // 다운로드 정보 업데이트
-      await fetch(`/api/jobs/${jobId}/download`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ downloaded_by: currentUser }),
-      });
-
-      // 작업 목록 새로고침
-      const shouldIncludeContent = filterType === 'content' || filterType === 'all';
-      await fetchJobs(shouldIncludeContent);
     } catch (error) {
       console.error('개별 작업 다운로드 오류:', error);
       alert(`다운로드 중 오류가 발생했습니다: ${error instanceof Error ? error.message : String(error)}`);
@@ -593,19 +584,7 @@ export default function JobsPage() {
 
       // 클립보드에 복사
       await navigator.clipboard.writeText(data.article.content);
-      
-      // 다운로드 정보 업데이트
-      await fetch(`/api/jobs/${jobId}/download`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ downloaded_by: currentUser }),
-      });
-
       alert('원고가 클립보드에 복사되었습니다.');
-
-      // 작업 목록 새로고침
-      const shouldIncludeContent = filterType === 'content' || filterType === 'all';
-      await fetchJobs(shouldIncludeContent);
     } catch (error) {
       console.error('텍스트 복사 오류:', error);
       alert(`텍스트 복사 중 오류가 발생했습니다: ${error instanceof Error ? error.message : String(error)}`);
@@ -654,6 +633,77 @@ export default function JobsPage() {
 
       // 클립보드에 복사
       await navigator.clipboard.writeText(allTexts);
+      alert(`${completedJobs.length}개의 원고가 클립보드에 복사되었습니다.`);
+    } catch (error) {
+      console.error('배치 텍스트 복사 오류:', error);
+      alert(`텍스트 복사 중 오류가 발생했습니다: ${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      setCopyingBatchId(null);
+    }
+  };
+
+  const handleConfirmJob = async (jobId: string) => {
+    if (!currentUser) {
+      alert('로그인이 필요합니다.');
+      return;
+    }
+
+    if (confirmingJobIds.has(jobId)) return;
+
+    setConfirmingJobIds((prev) => new Set(prev).add(jobId));
+
+    try {
+      // 다운로드 정보 업데이트
+      await fetch(`/api/jobs/${jobId}/download`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ downloaded_by: currentUser }),
+      });
+
+      alert('확인 완료 처리되었습니다.');
+
+      // 작업 목록 새로고침
+      const shouldIncludeContent = filterType === 'content' || filterType === 'all';
+      await fetchJobs(shouldIncludeContent);
+    } catch (error) {
+      console.error('확인 완료 오류:', error);
+      alert(`확인 완료 처리 중 오류가 발생했습니다: ${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      setConfirmingJobIds((prev) => {
+        const next = new Set(prev);
+        next.delete(jobId);
+        return next;
+      });
+    }
+  };
+
+  const handleBatchConfirm = async (batchId: string, clientName: string | null) => {
+    if (!currentUser) {
+      alert('로그인이 필요합니다.');
+      return;
+    }
+
+    if (confirmingBatchId === batchId) return;
+
+    setConfirmingBatchId(batchId);
+
+    try {
+      // 배치 내 모든 작업 조회
+      const res = await fetch(`/api/jobs/batch/${batchId}`);
+      if (!res.ok) {
+        throw new Error('배치 조회 실패');
+      }
+      const data = await res.json();
+      const batchJobs = data.jobs || [];
+
+      // 완료된 작업만 필터링
+      const completedJobs = batchJobs.filter((item: any) => item.article !== null && item.job.status === 'done');
+
+      if (completedJobs.length === 0) {
+        alert('확인 완료 처리할 완료된 작업이 없습니다.');
+        setConfirmingBatchId(null);
+        return;
+      }
 
       // 배치 내 모든 작업의 다운로드 정보 업데이트 (병렬 처리)
       const jobIds = completedJobs.map((item: any) => item.job.id);
@@ -669,15 +719,15 @@ export default function JobsPage() {
         )
       );
 
-      alert(`${completedJobs.length}개의 원고가 클립보드에 복사되었습니다.`);
+      alert(`${completedJobs.length}개의 작업이 확인 완료 처리되었습니다.`);
 
       // 작업 목록 새로고침
       fetchJobs().catch(console.error);
     } catch (error) {
-      console.error('배치 텍스트 복사 오류:', error);
-      alert(`텍스트 복사 중 오류가 발생했습니다: ${error instanceof Error ? error.message : String(error)}`);
+      console.error('배치 확인 완료 오류:', error);
+      alert(`확인 완료 처리 중 오류가 발생했습니다: ${error instanceof Error ? error.message : String(error)}`);
     } finally {
-      setCopyingBatchId(null);
+      setConfirmingBatchId(null);
     }
   };
 
@@ -721,20 +771,6 @@ export default function JobsPage() {
           return;
         }
       }
-
-      // 배치 내 모든 작업의 다운로드 정보 업데이트 (병렬 처리)
-      const jobIds = completedJobs.map((item: any) => item.job.id);
-      await Promise.allSettled(
-        jobIds.map((jobId: string) =>
-          fetch(`/api/jobs/${jobId}/download`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ downloaded_by: currentUser }),
-          }).catch((error) => {
-            console.error(`작업 ${jobId} 다운로드 정보 업데이트 실패:`, error);
-          })
-        )
-      );
 
       const zip = new JSZip();
       const date = new Date();
@@ -1154,24 +1190,31 @@ export default function JobsPage() {
                             )}
                           </td>
                           <td className="px-5 py-4">
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-1.5 flex-wrap">
                               <button
                                 onClick={() => group.batch_id && handleBatchDownload(group.batch_id, firstJob.client_name || null)}
                                 disabled={downloadingBatchId === group.batch_id}
-                                className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-semibold hover:bg-blue-700 active:bg-blue-800 disabled:bg-gray-400 disabled:cursor-not-allowed shadow-md transition-all whitespace-nowrap"
+                                className="px-2.5 py-1.5 bg-blue-600 text-white rounded text-xs font-medium hover:bg-blue-700 active:bg-blue-800 disabled:bg-gray-400 disabled:cursor-not-allowed shadow transition-all whitespace-nowrap"
                               >
-                                {downloadingBatchId === group.batch_id ? '압축 중...' : 'ZIP 다운로드'}
+                                {downloadingBatchId === group.batch_id ? '압축 중...' : 'ZIP'}
                               </button>
                               <button
                                 onClick={() => group.batch_id && handleBatchCopyText(group.batch_id, firstJob.client_name || null)}
                                 disabled={copyingBatchId === group.batch_id}
-                                className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-semibold hover:bg-green-700 active:bg-green-800 disabled:bg-gray-400 disabled:cursor-not-allowed shadow-md transition-all whitespace-nowrap"
+                                className="px-2.5 py-1.5 bg-green-600 text-white rounded text-xs font-medium hover:bg-green-700 active:bg-green-800 disabled:bg-gray-400 disabled:cursor-not-allowed shadow transition-all whitespace-nowrap"
                               >
-                                {copyingBatchId === group.batch_id ? '복사 중...' : '텍스트 복사'}
+                                {copyingBatchId === group.batch_id ? '복사 중...' : '복사'}
+                              </button>
+                              <button
+                                onClick={() => group.batch_id && handleBatchConfirm(group.batch_id, firstJob.client_name || null)}
+                                disabled={confirmingBatchId === group.batch_id || allDownloaded}
+                                className="px-2.5 py-1.5 bg-purple-600 text-white rounded text-xs font-medium hover:bg-purple-700 active:bg-purple-800 disabled:bg-gray-400 disabled:cursor-not-allowed shadow transition-all whitespace-nowrap"
+                              >
+                                {confirmingBatchId === group.batch_id ? '처리 중...' : '확인 완료'}
                               </button>
                               <button
                                 onClick={() => group.batch_id && handleDeleteBatch(group.batch_id, firstJob.client_name || null)}
-                                className="px-4 py-2 bg-red-600 text-white rounded-lg text-sm font-semibold hover:bg-red-700 active:bg-red-800 shadow-md transition-all whitespace-nowrap"
+                                className="px-2.5 py-1.5 bg-red-600 text-white rounded text-xs font-medium hover:bg-red-700 active:bg-red-800 shadow transition-all whitespace-nowrap"
                               >
                                 삭제
                               </button>
@@ -1270,22 +1313,29 @@ export default function JobsPage() {
                             )}
                           </td>
                           <td className="px-5 py-4">
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-1.5 flex-wrap">
                               {!isBatch && (
                                 <>
                                   <button
                                     onClick={() => handleSingleJobDownload(job.id, job.client_name || null)}
                                     disabled={downloadingJobIds.has(job.id) || job.status !== 'done'}
-                                    className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-semibold hover:bg-blue-700 active:bg-blue-800 disabled:bg-gray-400 disabled:cursor-not-allowed shadow-md transition-all whitespace-nowrap"
+                                    className="inline-flex items-center px-2.5 py-1.5 bg-blue-600 text-white rounded text-xs font-medium hover:bg-blue-700 active:bg-blue-800 disabled:bg-gray-400 disabled:cursor-not-allowed shadow transition-all whitespace-nowrap"
                                   >
-                                    {downloadingJobIds.has(job.id) ? '압축 중...' : 'ZIP 다운로드'}
+                                    {downloadingJobIds.has(job.id) ? '압축 중...' : 'ZIP'}
                                   </button>
                                   <button
                                     onClick={() => handleCopyText(job.id)}
                                     disabled={copyingJobIds.has(job.id) || job.status !== 'done'}
-                                    className="inline-flex items-center px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-semibold hover:bg-green-700 active:bg-green-800 disabled:bg-gray-400 disabled:cursor-not-allowed shadow-md transition-all whitespace-nowrap"
+                                    className="inline-flex items-center px-2.5 py-1.5 bg-green-600 text-white rounded text-xs font-medium hover:bg-green-700 active:bg-green-800 disabled:bg-gray-400 disabled:cursor-not-allowed shadow transition-all whitespace-nowrap"
                                   >
-                                    {copyingJobIds.has(job.id) ? '복사 중...' : '텍스트 복사'}
+                                    {copyingJobIds.has(job.id) ? '복사 중...' : '복사'}
+                                  </button>
+                                  <button
+                                    onClick={() => handleConfirmJob(job.id)}
+                                    disabled={confirmingJobIds.has(job.id) || job.status !== 'done' || job.downloaded_by !== null}
+                                    className="inline-flex items-center px-2.5 py-1.5 bg-purple-600 text-white rounded text-xs font-medium hover:bg-purple-700 active:bg-purple-800 disabled:bg-gray-400 disabled:cursor-not-allowed shadow transition-all whitespace-nowrap"
+                                  >
+                                    {confirmingJobIds.has(job.id) ? '처리 중...' : job.downloaded_by ? '완료됨' : '확인 완료'}
                                   </button>
                                 </>
                               )}
@@ -1293,14 +1343,14 @@ export default function JobsPage() {
                                 <button
                                   onClick={() => handleRetryJob(job.id)}
                                   disabled={retryingJobIds.has(job.id)}
-                                  className="inline-flex items-center px-4 py-2 bg-orange-600 text-white rounded-lg text-sm font-semibold hover:bg-orange-700 active:bg-orange-800 disabled:bg-gray-400 disabled:cursor-not-allowed shadow-md transition-all"
+                                  className="inline-flex items-center px-2.5 py-1.5 bg-orange-600 text-white rounded text-xs font-medium hover:bg-orange-700 active:bg-orange-800 disabled:bg-gray-400 disabled:cursor-not-allowed shadow transition-all"
                                 >
                                   {retryingJobIds.has(job.id) ? '재생성 중...' : '재생성'}
                                 </button>
                               )}
                               <button
                                 onClick={() => handleDeleteJob(job.id, job.client_name || '작업')}
-                                className="inline-flex items-center px-4 py-2 bg-red-600 text-white rounded-lg text-sm font-semibold hover:bg-red-700 active:bg-red-800 shadow-md transition-all"
+                                className="inline-flex items-center px-2.5 py-1.5 bg-red-600 text-white rounded text-xs font-medium hover:bg-red-700 active:bg-red-800 shadow transition-all"
                               >
                                 삭제
                               </button>
