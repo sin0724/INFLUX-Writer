@@ -565,6 +565,11 @@ export default function JobsPage() {
   };
 
   const handleCopyText = async (jobId: string) => {
+    if (!currentUser) {
+      alert('로그인이 필요합니다.');
+      return;
+    }
+
     if (copyingJobIds.has(jobId)) return;
 
     setCopyingJobIds((prev) => new Set(prev).add(jobId));
@@ -581,9 +586,26 @@ export default function JobsPage() {
         return;
       }
 
+      if (data.job?.status === 'error') {
+        alert('오류가 발생한 작업입니다. 재생성 후 복사할 수 있습니다.');
+        return;
+      }
+
       // 클립보드에 복사
       await navigator.clipboard.writeText(data.article.content);
+      
+      // 다운로드 정보 업데이트
+      await fetch(`/api/jobs/${jobId}/download`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ downloaded_by: currentUser }),
+      });
+
       alert('원고가 클립보드에 복사되었습니다.');
+
+      // 작업 목록 새로고침
+      const shouldIncludeContent = filterType === 'content' || filterType === 'all';
+      await fetchJobs(shouldIncludeContent);
     } catch (error) {
       console.error('텍스트 복사 오류:', error);
       alert(`텍스트 복사 중 오류가 발생했습니다: ${error instanceof Error ? error.message : String(error)}`);
@@ -597,6 +619,11 @@ export default function JobsPage() {
   };
 
   const handleBatchCopyText = async (batchId: string, clientName: string | null) => {
+    if (!currentUser) {
+      alert('로그인이 필요합니다.');
+      return;
+    }
+
     if (copyingBatchId === batchId) return;
 
     setCopyingBatchId(batchId);
@@ -627,7 +654,25 @@ export default function JobsPage() {
 
       // 클립보드에 복사
       await navigator.clipboard.writeText(allTexts);
+
+      // 배치 내 모든 작업의 다운로드 정보 업데이트 (병렬 처리)
+      const jobIds = completedJobs.map((item: any) => item.job.id);
+      await Promise.allSettled(
+        jobIds.map((jobId: string) =>
+          fetch(`/api/jobs/${jobId}/download`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ downloaded_by: currentUser }),
+          }).catch((error) => {
+            console.error(`작업 ${jobId} 다운로드 정보 업데이트 실패:`, error);
+          })
+        )
+      );
+
       alert(`${completedJobs.length}개의 원고가 클립보드에 복사되었습니다.`);
+
+      // 작업 목록 새로고침
+      fetchJobs().catch(console.error);
     } catch (error) {
       console.error('배치 텍스트 복사 오류:', error);
       alert(`텍스트 복사 중 오류가 발생했습니다: ${error instanceof Error ? error.message : String(error)}`);
@@ -914,7 +959,7 @@ export default function JobsPage() {
                       : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                   }`}
                 >
-                  광고주 컨펌 완료
+                  담당자 확인 완료
                 </button>
               </div>
             </div>
