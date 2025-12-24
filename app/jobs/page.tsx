@@ -43,6 +43,8 @@ export default function JobsPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [authChecked, setAuthChecked] = useState(false);
   const [downloadingBatchId, setDownloadingBatchId] = useState<string | null>(null);
+  const [copyingJobIds, setCopyingJobIds] = useState<Set<string>>(new Set()); // 텍스트 복사 중인 작업 ID
+  const [copyingBatchId, setCopyingBatchId] = useState<string | null>(null); // 텍스트 복사 중인 배치 ID
   const itemsPerPage = 20;
 
   useEffect(() => {
@@ -562,6 +564,78 @@ export default function JobsPage() {
     }
   };
 
+  const handleCopyText = async (jobId: string) => {
+    if (copyingJobIds.has(jobId)) return;
+
+    setCopyingJobIds((prev) => new Set(prev).add(jobId));
+
+    try {
+      const res = await fetch(`/api/jobs/${jobId}`);
+      if (!res.ok) {
+        throw new Error('작업 조회 실패');
+      }
+      const data = await res.json();
+
+      if (!data.article?.content) {
+        alert('복사할 원고가 없습니다.');
+        return;
+      }
+
+      // 클립보드에 복사
+      await navigator.clipboard.writeText(data.article.content);
+      alert('원고가 클립보드에 복사되었습니다.');
+    } catch (error) {
+      console.error('텍스트 복사 오류:', error);
+      alert(`텍스트 복사 중 오류가 발생했습니다: ${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      setCopyingJobIds((prev) => {
+        const next = new Set(prev);
+        next.delete(jobId);
+        return next;
+      });
+    }
+  };
+
+  const handleBatchCopyText = async (batchId: string, clientName: string | null) => {
+    if (copyingBatchId === batchId) return;
+
+    setCopyingBatchId(batchId);
+
+    try {
+      // 배치 내 모든 작업 조회
+      const res = await fetch(`/api/jobs/batch/${batchId}`);
+      if (!res.ok) {
+        throw new Error('배치 조회 실패');
+      }
+      const data = await res.json();
+      const batchJobs = data.jobs || [];
+
+      // 완료된 작업만 필터링
+      const completedJobs = batchJobs.filter((item: any) => item.article !== null && item.job.status === 'done');
+
+      if (completedJobs.length === 0) {
+        alert('복사할 완료된 원고가 없습니다.');
+        setCopyingBatchId(null);
+        return;
+      }
+
+      // 모든 원고를 합쳐서 복사 (각 원고 사이에 구분선 추가)
+      const allTexts = completedJobs.map((item: any, index: number) => {
+        const header = `========== 원고 ${index + 1} ==========\n`;
+        return header + (item.article?.content || '');
+      }).join('\n\n');
+
+      // 클립보드에 복사
+      await navigator.clipboard.writeText(allTexts);
+      alert(`${completedJobs.length}개의 원고가 클립보드에 복사되었습니다.`);
+    } catch (error) {
+      console.error('배치 텍스트 복사 오류:', error);
+      alert(`텍스트 복사 중 오류가 발생했습니다: ${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      setCopyingBatchId(null);
+    }
+  };
+
   const handleBatchDownload = async (batchId: string, clientName: string | null) => {
     if (!currentUser) {
       alert('로그인이 필요합니다.');
@@ -1044,6 +1118,13 @@ export default function JobsPage() {
                                 {downloadingBatchId === group.batch_id ? '압축 중...' : 'ZIP 다운로드'}
                               </button>
                               <button
+                                onClick={() => group.batch_id && handleBatchCopyText(group.batch_id, firstJob.client_name || null)}
+                                disabled={copyingBatchId === group.batch_id}
+                                className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-semibold hover:bg-green-700 active:bg-green-800 disabled:bg-gray-400 disabled:cursor-not-allowed shadow-md transition-all whitespace-nowrap"
+                              >
+                                {copyingBatchId === group.batch_id ? '복사 중...' : '텍스트 복사'}
+                              </button>
+                              <button
                                 onClick={() => group.batch_id && handleDeleteBatch(group.batch_id, firstJob.client_name || null)}
                                 className="px-4 py-2 bg-red-600 text-white rounded-lg text-sm font-semibold hover:bg-red-700 active:bg-red-800 shadow-md transition-all whitespace-nowrap"
                               >
@@ -1146,13 +1227,22 @@ export default function JobsPage() {
                           <td className="px-5 py-4">
                             <div className="flex items-center gap-2">
                               {!isBatch && (
-                                <button
-                                  onClick={() => handleSingleJobDownload(job.id, job.client_name || null)}
-                                  disabled={downloadingJobIds.has(job.id) || job.status !== 'done'}
-                                  className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-semibold hover:bg-blue-700 active:bg-blue-800 disabled:bg-gray-400 disabled:cursor-not-allowed shadow-md transition-all whitespace-nowrap"
-                                >
-                                  {downloadingJobIds.has(job.id) ? '압축 중...' : 'ZIP 다운로드'}
-                                </button>
+                                <>
+                                  <button
+                                    onClick={() => handleSingleJobDownload(job.id, job.client_name || null)}
+                                    disabled={downloadingJobIds.has(job.id) || job.status !== 'done'}
+                                    className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-semibold hover:bg-blue-700 active:bg-blue-800 disabled:bg-gray-400 disabled:cursor-not-allowed shadow-md transition-all whitespace-nowrap"
+                                  >
+                                    {downloadingJobIds.has(job.id) ? '압축 중...' : 'ZIP 다운로드'}
+                                  </button>
+                                  <button
+                                    onClick={() => handleCopyText(job.id)}
+                                    disabled={copyingJobIds.has(job.id) || job.status !== 'done'}
+                                    className="inline-flex items-center px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-semibold hover:bg-green-700 active:bg-green-800 disabled:bg-gray-400 disabled:cursor-not-allowed shadow-md transition-all whitespace-nowrap"
+                                  >
+                                    {copyingJobIds.has(job.id) ? '복사 중...' : '텍스트 복사'}
+                                  </button>
+                                </>
                               )}
                               {(job.status === 'error' || job.status === 'processing' || job.status === 'pending') && (
                                 <button
