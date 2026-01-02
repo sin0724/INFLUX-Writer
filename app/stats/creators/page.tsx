@@ -162,7 +162,7 @@ export default function CreatorStatsPage() {
             </div>
           </div>
           <div className="bg-white p-6 rounded-xl shadow-lg border border-gray-100">
-            <div className="text-sm text-gray-600 mb-2">완료된 작업</div>
+            <div className="text-sm text-gray-600 mb-2">원고 작성 완료된 작업</div>
             <div className="text-3xl font-bold text-green-600">
               {stats.reduce((sum, s) => sum + s.done, 0).toLocaleString()}
             </div>
@@ -203,7 +203,7 @@ export default function CreatorStatsPage() {
                     onClick={() => handleSort('done')}
                   >
                     <div className="flex items-center gap-2">
-                      완료
+                      원고 작성 완료
                       {sortBy === 'done' && <span>{sortOrder === 'asc' ? '↑' : '↓'}</span>}
                     </div>
                   </th>

@@ -36,7 +36,7 @@ export default function JobsPage() {
   const [filterType, setFilterType] = useState<'all' | 'client' | 'creator' | 'downloader' | 'content'>('all');
   const [downloadFilter, setDownloadFilter] = useState<'downloaded' | 'not_downloaded'>('not_downloaded');
   const [confirmationFilter, setConfirmationFilter] = useState<'all' | 'requires_confirmation' | 'no_confirmation'>('all');
-  const [statusFilter, setStatusFilter] = useState<'all' | 'error' | 'processing'>('all');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'error' | 'processing' | 'done'>('all');
   const [retryingJobIds, setRetryingJobIds] = useState<Set<string>>(new Set());
   const [retriedJobIds, setRetriedJobIds] = useState<Set<string>>(new Set()); // 재생성된 작업 추적
   const [currentUser, setCurrentUser] = useState<string | null>(null);
@@ -296,7 +296,7 @@ export default function JobsPage() {
     
     switch (status) {
       case 'done':
-        return '완료';
+        return '원고 작성 완료';
       case 'processing':
         return '처리 중';
       case 'error':
@@ -954,6 +954,19 @@ export default function JobsPage() {
                 </button>
                 <button
                   onClick={() => {
+                    setStatusFilter('done');
+                    setCurrentPage(1);
+                  }}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                    statusFilter === 'done'
+                      ? 'bg-green-600 text-white shadow-md'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  }`}
+                >
+                  원고 작성 완료
+                </button>
+                <button
+                  onClick={() => {
                     setStatusFilter('error');
                     setCurrentPage(1);
                   }}
@@ -1151,7 +1164,7 @@ export default function JobsPage() {
                               ) : (
                                 <span className="text-xs font-semibold text-yellow-700">다운로드 확인 필요</span>
                               )}
-                              <span className="text-xs font-semibold text-gray-700">완료 {doneCount}/{group.jobs.length}건</span>
+                              <span className="text-xs font-semibold text-gray-700">원고 작성 완료 {doneCount}/{group.jobs.length}건</span>
                             </div>
                           </td>
                           <td className="px-5 py-4">

@@ -310,7 +310,7 @@ export default function JobDetailPage() {
   const getStatusText = (status: string) => {
     switch (status) {
       case 'done':
-        return '완료';
+        return '원고 작성 완료';
       case 'processing':
         return '처리 중';
       case 'error':

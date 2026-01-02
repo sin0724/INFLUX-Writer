@@ -117,7 +117,7 @@ export default function Home() {
                 </svg>
               </div>
             </div>
-            <div className="text-sm text-gray-600 mb-2">완료된 작업</div>
+            <div className="text-sm text-gray-600 mb-2">원고 작성 완료된 작업</div>
             <div className="text-4xl font-bold text-green-600">{stats.doneJobs}</div>
           </div>
 
